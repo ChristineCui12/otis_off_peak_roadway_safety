@@ -126,32 +126,50 @@ bus_count <- count_nearest_points(transit_stops, basenetwork, unique_id_col, "co
 calming_count <- count_nearest_points(traffic_calming, basenetwork, unique_id_col, "count_calming")
 ```
 
-## 6. Strategy B: Node-Based Features (Buffer Intersection)
+## 6. Strategy B: Node-Based Features (Buffer Intersection & Visualization)
 
-Applicable to features located at intersections (Stop Signs, red light cameras). We generate a 30-ft buffer around the points to capture all intersecting street segments.
+This strategy handles features located at intersections, such as red light cameras and stop signs. Since these facilities govern all approaching street segments, we apply a **30-foot buffer** to capture all intersecting centerlines rather than just the single closest one.
 
-```{r strategy_b_buffer}
-# --- Multiple assignment function for intersection buffers ---
+```{r strategy_b_buffer_and_viz, message=FALSE, warning=FALSE}
+# --- 1. Define Function for Intersection Buffer Join ---
 count_intersection_points <- function(points_sf, lines_sf, id_col, new_count_name, buffer_ft = 30) {
-  # 1. Create buffer for intersection features
+  # Generate buffers around intersection features
   points_buffered <- st_buffer(points_sf, dist = buffer_ft)
   
-  # 2. Spatial intersect (join the line segments to the buffered polygons)
+  # Perform spatial intersection (joining lines to buffers)
   lines_joined <- st_join(lines_sf, points_buffered, join = st_intersects)
   
-  # 3. Count how many facility buffers each line segment touches
+  # Aggregate counts by street segment ID
   summary_df <- lines_joined %>%
     st_drop_geometry() %>%
-    filter(!is.na(st_drop_geometry(points_sf)[1, 1])) %>% # Simple filtering for unmatched records
+    # Filter out segments that did not intersect any buffer
+    filter(!is.na(st_drop_geometry(points_sf)[1, 1])) %>% 
     group_by(!!sym(id_col)) %>%
     summarise(!!new_count_name := n(), .groups = "drop")
   
   return(summary_df)
 }
 
-# --- Execute calculation ---
+# --- 2. Execute Spatial Joins for Node-Based Datasets ---
 intersect_count <- count_intersection_points(intersection_ctrl, basenetwork, unique_id_col, "count_intersection_ctrl")
 camera_count <- count_intersection_points(fixed_camera, basenetwork, unique_id_col, "count_camera")
+
+# --- 3. Interactive Visualization of the Buffer Logic ---
+# Extract a sample of 10 points for demonstration to maintain performance
+sample_points <- intersection_ctrl %>% head(10)
+
+# Generate 30ft buffers for the sample
+sample_buffers <- st_buffer(sample_points, dist = 30)
+
+# Identify street centerlines that intersect the sample buffers
+intersecting_lines <- basenetwork %>% 
+  st_filter(sample_buffers, .predicate = st_intersects)
+
+# Create an interactive map using mapview
+# Layering: Lines (Bottom) -> Buffers (Middle) -> Points (Top)
+mapview(intersecting_lines, color = "royalblue", lwd = 4, layer.name = "Intersecting Streets") +
+  mapview(sample_buffers, col.regions = "red", alpha.regions = 0.5, layer.name = "30ft Buffers") +
+  mapview(sample_points, color = "black", col.regions = "black", cex = 1, layer.name = "Facility Nodes")
 ```
 
 ## 7. Final Assembly
