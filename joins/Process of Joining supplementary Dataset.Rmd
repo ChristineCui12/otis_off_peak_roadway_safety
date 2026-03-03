@@ -1,0 +1,173 @@
+---
+title: "Spatial Join of Urban Features to Base Network"
+author: "Christine"
+date: "2026-03-03"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+---
+
+## 1. Introduction & Methodology
+
+This document outlines the spatial data processing workflow for assigning various urban facilities (points/small polygons) to a street centerline network (`basenetwork`). 
+
+Because the real-world coordinates of facilities rarely perfectly overlap with street centerlines, we employ two distinct spatial join strategies based on the physical distribution of the features:
+
+* **Edge-based Features (Nearest Neighbor):** For facilities distributed along road segments (e.g., street poles, transit stops, traffic calming devices), we snap them to the nearest street centerline.
+* **Node-based Features (Buffer Intersect):** For facilities located at intersections (e.g., red light cameras, intersection controls), we create a **30-foot buffer**. 
+    * *Justification for 30ft:* Standard urban street right-of-way (ROW) is typically 40-60 feet. A 30-foot radius from a street corner (where cameras/signs are physically installed) creates a 60-foot diameter coverage. This perfectly bridges the geometric gap between the physical corner and the topological center of the intersection, ensuring the node feature is accurately assigned to all 3-4 intersecting street segments without bleeding into adjacent blocks.
+
+---
+
+## 2. Environment Setup & Authentication
+
+```{r setup, message=FALSE, warning=FALSE}
+# --- Environment Setup & Box Authentication ---
+library(tidyverse)
+library(tidygeocoder)
+library(sf)
+library(mapview) 
+library(janitor) 
+library(boxr)
+
+# You only need to authenticate once per R session.
+# Ensure BOX_CLIENT_ID and SECRET are configured in your .Renviron
+box_auth()
+```
+
+## 3. Custom Functions
+
+We define a robust helper function to handle downloading and reading various spatial formats from Box, automatically standardizing them to **EPSG:2272 (NAD83 / Pennsylvania South)**.
+
+```{r define_functions}
+# --- Smart Box Spatial Data Reader ---
+read_box_sf <- function(file_id, crs = 2272) {
+  # 1. Get temporary directory path
+  temp_dir <- tempdir()
+  
+  # 2. Download file and get exact local path
+  dl_info <- box_dl(file_id, local_dir = temp_dir, overwrite = TRUE)
+  file_path_exact <- as.character(dl_info)
+  
+  # 3. Determine file type and read accordingly
+  if (grepl("\\.rds$", file_path_exact, ignore.case = TRUE)) {
+    # If it's an .rds file, use readRDS
+    cat("Detected .rds file, reading with readRDS...\n")
+    sf_data <- readRDS(file_path_exact)
+    
+    # Ensure the object is an 'sf' object before transforming CRS
+    if (inherits(sf_data, "sf")) {
+      sf_data <- st_transform(sf_data, crs)
+    } else {
+      warning("Warning: This .rds file does not contain sf spatial data!")
+    }
+    
+  } else {
+    # If it's a standard spatial file (.geojson, .shp), use st_read
+    cat("Detected standard spatial file, reading with st_read...\n")
+    sf_data <- st_read(file_path_exact, quiet = TRUE) %>% 
+      st_transform(crs)
+  }
+  
+  return(sf_data)
+}
+```
+
+## 4. Data Loading & Cleaning
+
+```{r load_data, results='hide'}
+# --- Read data and clean column names (converts to lowercase with underscores) ---
+basenetwork <- read_box_sf(2151757279199) %>% clean_names()
+
+traffic_calming <- read_box_sf(2123213862368) %>% clean_names()
+intersection_ctrl <- read_box_sf(2123208654111) %>% clean_names()
+street_poles <- read_box_sf(2129860050884) %>% clean_names()
+transit_stops <- read_box_sf(2130613247190) %>% clean_names()
+fixed_camera <- read_box_sf(2144281173122) %>% clean_names()
+
+# Set the unique identifier column for the base network
+unique_id_col <- "seg_id"
+```
+
+## 5. Strategy A: Edge-Based Features (Nearest Neighbor)
+
+Applicable to features distributed along road segments (street poles, transit stops, traffic calming). We use `st_nearest_feature` to match each point to the closest street centerline.
+
+```{r strategy_a_nearest}
+# --- Conflict-proof nearest neighbor counting function ---
+count_nearest_points <- function(points_sf, lines_sf, id_col, new_count_name) {
+  
+  # [Crucial Step]: Only keep the geometry of the point data!
+  # This entirely prevents .x and .y renaming issues caused by identical column names
+  points_only_geom <- points_sf %>% select(geometry)
+  
+  # Keep only the unique ID column for the line data
+  lines_only_id <- lines_sf %>% select(all_of(id_col))
+  
+  # Spatial nearest neighbor join
+  points_joined <- st_join(points_only_geom, lines_only_id, join = st_nearest_feature)
+  
+  # Aggregate and count
+  summary_df <- points_joined %>%
+    st_drop_geometry() %>%
+    filter(!is.na(!!sym(id_col))) %>% # Filter out anomalies where ID is NA
+    group_by(!!sym(id_col)) %>%
+    summarise(!!new_count_name := n(), .groups = "drop")
+  
+  return(summary_df)
+}
+
+# --- Execute calculation ---
+poles_count <- count_nearest_points(street_poles, basenetwork, unique_id_col, "count_poles")
+bus_count <- count_nearest_points(transit_stops, basenetwork, unique_id_col, "count_transit")
+calming_count <- count_nearest_points(traffic_calming, basenetwork, unique_id_col, "count_calming")
+```
+
+## 6. Strategy B: Node-Based Features (Buffer Intersection)
+
+Applicable to features located at intersections (Stop Signs, red light cameras). We generate a 30-ft buffer around the points to capture all intersecting street segments.
+
+```{r strategy_b_buffer}
+# --- Multiple assignment function for intersection buffers ---
+count_intersection_points <- function(points_sf, lines_sf, id_col, new_count_name, buffer_ft = 30) {
+  # 1. Create buffer for intersection features
+  points_buffered <- st_buffer(points_sf, dist = buffer_ft)
+  
+  # 2. Spatial intersect (join the line segments to the buffered polygons)
+  lines_joined <- st_join(lines_sf, points_buffered, join = st_intersects)
+  
+  # 3. Count how many facility buffers each line segment touches
+  summary_df <- lines_joined %>%
+    st_drop_geometry() %>%
+    filter(!is.na(st_drop_geometry(points_sf)[1, 1])) %>% # Simple filtering for unmatched records
+    group_by(!!sym(id_col)) %>%
+    summarise(!!new_count_name := n(), .groups = "drop")
+  
+  return(summary_df)
+}
+
+# --- Execute calculation ---
+intersect_count <- count_intersection_points(intersection_ctrl, basenetwork, unique_id_col, "count_intersection_ctrl")
+camera_count <- count_intersection_points(fixed_camera, basenetwork, unique_id_col, "count_camera")
+```
+
+## 7. Final Assembly
+
+Merge all the newly created count features back into the original street network. Replace `NA` values with `0` for road segments that do not have these facilities.
+
+```{r final_join}
+# --- Join all features back to the base network ---
+basenetwork_final <- basenetwork %>%
+  left_join(poles_count, by = unique_id_col) %>%
+  left_join(bus_count, by = unique_id_col) %>%
+  left_join(calming_count, by = unique_id_col) %>%
+  left_join(intersect_count, by = unique_id_col) %>%
+  left_join(camera_count, by = unique_id_col) %>%
+  mutate(across(starts_with("count_"), ~replace_na(.x, 0)))
+
+# Check the structure of the final data
+glimpse(basenetwork_final)
+```
