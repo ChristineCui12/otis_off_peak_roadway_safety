@@ -18,10 +18,12 @@ box_processed_data_folder <- 362958210990
 # Read data -----------------------------------------------------------------------------------
 
 # OSM data
+# /Box-Box/Phila_OTIS/data/processed/osm_roads_data_all.rds
 osm_raw <- box_read_rds(2138013253852) %>% 
   st_transform("EPSG:2272")
 
 # Street segments
+# /Box-Box/Phila_OTIS/data/processed/base_network_clean.rds
 streets_raw <- box_read_rds(2151757279199) %>% 
   st_transform("EPSG:2272")
 
@@ -176,7 +178,7 @@ get_orientation <- function(start, end) {
   # 0 is East, pi/2 is North
   angle <- atan2(end[2] - start[2], end[1] - start[1])
   
-  # Convert to degrees (0-360)
+  # Convert to degrees (0-179)
   angle_deg <- (angle * 180 / pi) %% 360 %>% 
     round(-1) %>% 
     if_else(. >= 180, . - 180, .)
@@ -192,8 +194,6 @@ osm_ready_to_join <- osm_clean %>%
   ) %>% 
   select(osm_id, orientation_osm)
 
-# mapview(osm_ready_to_join, zcol = "orientation_osm")
-
 streets_ready_to_join <- streets_raw %>%
   select(seg_id) %>% 
   mutate(
@@ -204,7 +204,12 @@ streets_ready_to_join <- streets_raw %>%
   ) %>% 
   select(seg_id, orientation_streets)
 
-# mapview(streets_ready_to_join, zcol = "orientation_streets")
+mapview(streets_ready_to_join, zcol = "orientation_streets", color = mapviewPalette("mapviewSpectralColors")) +
+  mapview(osm_ready_to_join, zcol = "orientation_osm", color = mapviewPalette("mapviewTopoColors"))
+
+# Test for parallel segments ------------------------------------------------------------------
+
+
 
 # Join ----------------------------------------------------------------------------------------
 
@@ -221,8 +226,11 @@ tictoc::toc()
 
 joined_processed <- joined_raw %>% 
   # Only accept a join if orientation is same
+  mutate(orientation_diff = abs(orientation_osm - orientation_streets)) %>% 
+  # Consider angles near the 0/180 degree wrap-around
+  mutate(orientation_diff <- min(orientation_diff, 180 - orientation_diff)) %>% 
   # filter: removed 51,939 rows (68%), 24,418 rows remaining
-  filter(abs(orientation_osm - orientation_streets) <= 15) %>% 
+  filter(orientation_diff <= 15) %>% 
   mutate(hovertext = str_c("<b>OSM:</b> ", osm_id, "<br><b>Centerlines:</b> ", seg_id, "<br>"))
   
 # Test the join -----------------------------------------------------------------------------------
@@ -297,6 +305,67 @@ mapview(joined_processed %>%
             select(seg_id), 
           color = "darkgray", label = "hovertext", layer.name = "All centerlines not matched")
 
+# All joins which are 1 OSM -> multiple centerlines
+osm_join_dupes <- joined_processed %>% 
+  get_dupes(osm_id)
+
+mapview(osm_join_dupes %>% 
+          left_join(osm_ready_to_join %>% select(osm_id)) %>% 
+          st_as_sf(crs = "EPSG:2272"), 
+        label = "hovertext", 
+        layer.name = "OSM",
+        zcol = "osm_id",
+        color = mapviewPalette("mapviewTopoColors")) +
+  mapview(osm_join_dupes %>% 
+            left_join(streets_ready_to_join %>% select(seg_id)) %>% 
+            st_as_sf(crs = "EPSG:2272"), 
+          label = "hovertext", 
+          layer.name = "Centerlines",
+          zcol = "seg_id",
+          color = mapviewPalette("mapviewSpectralColors"))
+
+# All joins which are 1 centerlines -> multiple OSM
+streets_join_dupes <- joined_processed %>% 
+  get_dupes(seg_id)
+
+mapview(streets_join_dupes %>% 
+          left_join(streets_ready_to_join %>% select(seg_id)) %>% 
+          st_as_sf(crs = "EPSG:2272"), 
+        label = "hovertext", 
+        layer.name = "Centerlines",
+        zcol = "seg_id",
+        color = mapviewPalette("mapviewTopoColors")) +
+  mapview(streets_join_dupes %>% 
+            left_join(osm_ready_to_join %>% select(osm_id)) %>% 
+            st_as_sf(crs = "EPSG:2272"), 
+          label = "hovertext", 
+          layer.name = "OSM",
+          zcol = "osm_id",
+          color = mapviewPalette("mapviewSpectralColors")) 
+
+# All joins which are 1 centerlines -> 1 OSM
+join_no_dupes <- joined_processed %>% 
+  # filter: removed 23,845 rows (98%), 573 rows remaining
+  filter(!seg_id %in% streets_join_dupes$seg_id &
+           !osm_id %in% osm_join_dupes$osm_id)
+
+mapview(join_no_dupes %>% 
+          left_join(streets_ready_to_join %>% select(seg_id)) %>% 
+          st_as_sf(crs = "EPSG:2272"), 
+        label = "hovertext", 
+        layer.name = "Centerlines",
+        zcol = "seg_id",
+        color = mapviewPalette("mapviewTopoColors")) +
+  mapview(join_no_dupes %>% 
+            left_join(osm_ready_to_join %>% select(osm_id)) %>% 
+            st_as_sf(crs = "EPSG:2272"), 
+          label = "hovertext", 
+          layer.name = "OSM",
+          zcol = "osm_id",
+          color = mapviewPalette("mapviewSpectralColors")) 
+
+
+
 # Remaining issues ----------------------------------------------------------------------------
 
 # Some wide roadways (e.g., parkside, girard, market, parkway, 38th, grant ave) are mapped as
@@ -306,6 +375,13 @@ mapview(joined_processed %>%
 # The OSM attributes (lane count, parking, sidewalks) have to be normalized at the scale of
 # the centerlines data. If a centerlines segment has multiple OSM segments, need to figure
 # out how to aggregate/summarize OSM data.
+
+
+
+# ---------------------------------------------------------------------------------------------
+
+
+
 
 
 
