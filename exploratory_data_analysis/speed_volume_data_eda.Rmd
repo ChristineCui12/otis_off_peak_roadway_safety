@@ -147,8 +147,7 @@ volume_data_initial <- batch_read_files(volume_files) %>%
 
 ```
 
-
-```{r, include = FALSE}
+```{r Skim speed data, include = FALSE}
 
 glimpse(speed_data_initial)
 
@@ -176,7 +175,7 @@ speed_data_initial %>%
 
 ```
 
-```{r, include = FALSE}
+```{r Skim volume data, include = FALSE}
 
 glimpse(volume_data_initial)
 
@@ -204,7 +203,7 @@ volume_data_initial %>%
 
 ```
 
-```{r Export data, include=FALSE}
+```{r Export raw data, include=FALSE}
 
 # speed_data_export <- speed_data_initial %>% 
 #   remove_empty()
@@ -218,11 +217,11 @@ volume_data_initial %>%
 
 ```
 
-```{r, include=FALSE}
+```{r Find identifier, include=FALSE}
 
 # What are unique identifiers for each measurement point?
 speed_ids <- speed_data_initial %>% 
-  distinct(year, recordnum, aadv, fromlmt, tolmt, latitude, longitude)
+  distinct(year, recordnum, aadv, fromlmt, tolmt, latitude, longitude, trafdir, header_cntdir)
 
 speed_ids_test1 <- speed_ids %>% 
   # distinct: no rows removed
@@ -257,7 +256,9 @@ speed_ids_test7 <- speed_data_initial %>%
   summarize(recordnum_unique = n_distinct(recordnum),
             aadv_unique = n_distinct(aadv),
             longitude_unique = n_distinct(longitude),
-            latitude_unique = n_distinct(latitude)) %>% 
+            latitude_unique = n_distinct(latitude),
+            trafdir_unique = n_distinct(trafdir),
+            header_cntdir_unique = n_distinct(header_cntdir)) %>% 
   ungroup() %>% 
   select(-contains("speed_"))
 
@@ -269,7 +270,9 @@ speed_ids_test8 <- speed_data_initial %>%
   summarize(recordnum_unique = n_distinct(recordnum),
             aadv_unique = n_distinct(aadv),
             fromlmt_unique = n_distinct(fromlmt),
-            tolmt_unique = n_distinct(tolmt)) %>% 
+            tolmt_unique = n_distinct(tolmt),
+            trafdir_unique = n_distinct(trafdir),
+            header_cntdir_unique = n_distinct(header_cntdir)) %>% 
   ungroup() %>% 
   select(-contains("speed_"))
 
@@ -281,22 +284,38 @@ speed_ids_test9 <- speed_data_initial %>%
   summarize(recordnum_unique = n_distinct(recordnum),
             aadv_unique = n_distinct(aadv),
             longitude_unique = n_distinct(longitude),
-            latitude_unique = n_distinct(latitude)) %>% 
+            latitude_unique = n_distinct(latitude),
+            trafdir_unique = n_distinct(trafdir),
+            header_cntdir_unique = n_distinct(header_cntdir)) %>% 
+  ungroup() %>% 
+  select(-contains("speed_"))
+
+# How about just recordnum?
+# No duplication
+speed_ids_test10 <- speed_data_initial %>% 
+  filter(count_hr == 0) %>% 
+  group_by(recordnum) %>% 
+  summarize(year_unique = n_distinct(year),
+            aadv_unique = n_distinct(aadv),
+            fromlmt_unique = n_distinct(fromlmt),
+            tolmt_unique = n_distinct(tolmt),
+            longitude_unique = n_distinct(longitude),
+            latitude_unique = n_distinct(latitude),
+            trafdir_unique = n_distinct(trafdir),
+            header_cntdir_unique = n_distinct(header_cntdir)) %>% 
   ungroup() %>% 
   select(-contains("speed_"))
 
 # Summary: 
-# 'recordnum' seems to be the most obvious choice; there are some duplicates of same data under
-# different 'recordnum' values, but not too many. 'aadv' is more specific but records annual average
-# traffic volume and doesn't seem intended to be used as an ID.
+# 'recordnum' is the best unique ID.
 # But note that the same coordinates can have different recorded data across the same dates, 
-# perhaps because there were two measurement tubes across the same section of the roadway.
+# sometimes because there were two measurement tubes across the same section of the roadway.
 # Further, the same fromlmt/tolmt pair can include multiple coordinates, so 'recordnum' should be
 # used as the unique identifier for measurement points.
 
 ```
 
-```{r}
+```{r Find join key}
 
 # Are there join keys between speed/volume in the data?
 # 'recordnum' seems to be the cleanest join key
@@ -337,10 +356,13 @@ join_test3 <- speed_data_initial %>%
 #            > rows total                              590
 
 # Comparing the total volume data from both the speed and volume datasets
-joined <- speed_data_initial %>% 
+join_test4 <- speed_data_initial %>% 
   full_join(volume_data_initial %>% 
-              select(year, recordnum, countdate, count_hr, fromlmt, tolmt, longitude, latitude, volcount), 
-            by = c("year", "recordnum", "countdate", "count_hr", "fromlmt", "tolmt", "longitude", "latitude")) %>% 
+              select(year, recordnum, 
+                     countdate, count_hr, fromlmt, tolmt, longitude, latitude, volcount,
+                     header_cntdir), 
+            by = c("year", "recordnum", "countdate", "count_hr", 
+                   "fromlmt", "tolmt", "longitude", "latitude", "header_cntdir")) %>% 
   mutate(volume_agreement = volcount == total) %>% 
   mutate(volume_diff = volcount - total) %>% 
   mutate(volume_diff_category = case_when(volume_diff == 0 ~ "No diff",
@@ -356,7 +378,7 @@ joined <- speed_data_initial %>%
 #            > rows total                              55,608
 
 # About 15% of rows have disagreements for total volume between volume and speed
-# joined %>% tabyl(volume_agreement)
+# join_test4 %>% tabyl(volume_agreement)
 
  # volume_agreement     n    percent valid_percent
  #            FALSE  8089 0.14546468     0.1482805
@@ -364,7 +386,7 @@ joined <- speed_data_initial %>%
  #               NA  1056 0.01899007            NA
 
 # Usually when there are differences the value in the speed dataset is larger, which is strange
-# joined %>% tabyl(volume_diff_category)
+# join_test4 %>% tabyl(volume_diff_category)
 
  # volume_diff_category     n    percent
  #              No diff 46463 0.83554525
@@ -374,6 +396,220 @@ joined <- speed_data_initial %>%
 
 # Upshot: We'll use the volume from the volume data directly since that is what that dataset is for, 
 # not the total column in the speed data
+
+joined <- speed_data_initial %>% 
+  left_join(volume_data_initial %>% 
+              select(recordnum, countdate, count_hr, volcount), 
+            by = c("recordnum", "countdate", "count_hr")) 
+# left_join: added one column (volcount)
+#            > rows only in x                             936
+#            > rows only in volume_data_initial %>%.. (   120)
+#            > matched rows                            54,552
+#            >                                        ========
+#            > rows total                              55,488
+
+```
+
+```{r Count direction check, include=FALSE}
+
+# 122 entries
+speed_multiple_directions <- speed_data_initial %>% 
+  distinct(road, fromlmt, tolmt, trafdir, header_cntdir) %>% 
+  get_dupes(road, fromlmt, tolmt, trafdir)
+
+# Check same recordnum has the same count directions
+join_direction_check <- speed_data_initial %>% 
+  inner_join(volume_data_initial %>% 
+              select(year, recordnum, countdate, count_hr, fromlmt, tolmt, 
+                     trafdir, header_cntdir), 
+            by = c("year", "recordnum", "countdate", "count_hr", "fromlmt", "tolmt"),
+            suffix = c(".speed", ".volume")) %>% 
+  mutate(trafdir_same = trafdir.speed == trafdir.volume) %>% 
+  mutate(header_cntdir_same = header_cntdir.speed == header_cntdir.volume)
+
+# No discrepancy
+join_direction_check %>% tabyl(trafdir_same)
+join_direction_check %>% tabyl(header_cntdir_same)
+
+```
+
+```{r}
+
+# Speed data in long format to facilitate analyses
+speed_data_long <- speed_data_initial %>% 
+  # Join volume data
+  left_join(volume_data_initial %>% 
+              select(recordnum, countdate, count_hr, volcount),
+            by = c("recordnum", "countdate", "count_hr")) %>% 
+  # Use totals from speed data only if there's no acceptable corresponding volume data
+  mutate(volume_total = 
+           case_when(is.na(volcount) ~ total,
+                     volcount == 0 & total != 0 ~ total,
+                     total > volcount ~ total,
+                     .default = volcount)) %>% 
+  select(year, recordnum, speedlimit, road, fromlmt, tolmt, countdate, count_hr, volume_total, contains("speed_")) %>% 
+  pivot_longer(contains("speed_"), 
+               values_to = "count", 
+               names_to = c("range_low", "range_high"), 
+               names_pattern = "speed_(\\d+)_(\\d+)") %>% 
+  # Reduce speed categories
+  mutate(speed_category_binary =
+           if_else(range_high > speedlimit, "Speeding", "Not speeding")) %>% 
+  mutate(speed_category_detailed =
+           case_when(range_high <= speedlimit ~ "Not speeding",
+                     range_low > speedlimit + 20 ~ "More than 20mph over speed limit",
+                     range_low > speedlimit + 15 ~ "16-20mph over speed limit",
+                     range_low > speedlimit + 10 ~ "11-15mph over speed limit",
+                     range_low > speedlimit + 0 ~ "1-10mph over speed limit",
+                     .default = "CHECK")) %>% 
+  mutate(speed_category_detailed =
+           fct_relevel(speed_category_detailed,
+                      "Not speeding",
+                      "1-10mph over speed limit",
+                      "11-15mph over speed limit",
+                      "16-20mph over speed limit",
+                      "More than 20mph over speed limit")) %>% 
+  # Modeling target variables
+  mutate(speeding =
+           if_else(range_high > speedlimit, "Speeding", "Not speeding")) %>% 
+  mutate(high_speeding =
+           if_else(range_high > speedlimit + 10, "High speeding", "Not high speeding"))
+
+
+```
+
+```{r Join to centerlines}
+
+centerlines <- box_read_rds(2139915462983)
+
+centerlines_ready <- centerlines %>% 
+  mutate(roadway_type = 
+           case_when(class == 0 ~ "Navy Yard",
+                     class == 1 ~ "Expressways",
+                     class == 2 ~ "Major Arterial",
+                     class == 3 ~ "Minor Arterial",
+                     class == 4 ~ "Collector",
+                     class == 5 ~ "Local",
+                     class == 6 ~ "Driveway",
+                     class == 9 ~ "Low Speed Ramps",
+                     class == 10 ~ "High Speed Ramps",
+                     class == 12 ~ "Non Travable",
+                     class == 14 ~ "City Boundary",
+                     class == 15 ~ "Walking Connector",
+                     class == 18 ~ "Traffic Controlled Crosswalks")) %>% 
+  # There are a few industrial/parking types of segments under class == 13 
+  # which is not labeled in the data dictionary and is excluded here.
+  # filter: removed 73 rows (<1%), 41,186 rows remaining
+  filter(!is.na(roadway_type)) %>% 
+  select(seg_id, roadway_type) %>% 
+  # Index column
+  mutate(centerlines_index = row_number()) %>% 
+  # Projected CRS
+  st_transform("EPSG:2272")
+  
+speed_data_coords <- speed_data_initial %>% 
+  distinct(recordnum, longitude, latitude) %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = "EPSG:4326", remove = FALSE) %>% 
+  # Projected CRS
+  st_transform("EPSG:2272")
+
+# Find the index of the nearest line for each point
+nearest_line_indices <- st_nearest_feature(speed_data_coords, centerlines_ready)
+
+# Join by index
+# Geometry: measurement points
+speed_data_centerlines <- speed_data_coords %>% 
+  mutate(centerlines_index = centerlines_ready$centerlines_index[nearest_line_indices]) %>% 
+  left_join(centerlines_ready %>% st_drop_geometry())
+
+# Geometry: segments where measurements were made
+speed_data_centerlines_segments <- speed_data_centerlines %>%
+  st_drop_geometry() %>%
+  left_join(centerlines_ready %>% 
+              select(seg_id)) %>%
+  st_as_sf(crs = "EPSG:2272")
+# left_join: added one column (geometry)
+#            > rows only in x                               0
+#            > rows only in centerlines_ready %>% s.. (40,711)
+#            > matched rows                               577
+#            >                                        ========
+#            > rows total                                 577
+
+```
+
+```{r Speed data ready for analysis}
+
+speed_data_analysis <- speed_data_long %>% 
+  left_join(speed_data_centerlines %>% 
+              st_drop_geometry() %>% 
+              select(recordnum, seg_id, roadway_type, longitude, latitude),
+            by = "recordnum") %>% 
+  mutate(time_of_day = 
+           case_when(count_hr >= 20 ~ "Off-peak",
+                     count_hr >= 16 ~ "Peak",
+                     count_hr >= 11 ~ "Off-peak",
+                     count_hr >= 7 ~ "Peak",
+                     count_hr >= 0 ~ "Off-peak")) %>% 
+  # Exclude highway-related measurement points
+  # filter: removed 16,464 rows (2%), 760,368 rows remaining
+  filter(!roadway_type %in% c("High Speed Ramps", "Low Speed Ramps", "Expressways")) %>% 
+  mutate(roadway_type =
+           fct_relevel(roadway_type,
+                       "Major Arterial",
+                       "Minor Arterial",
+                       "Collector",
+                       "Local"))
+
+```
+
+```{r Construct modeling data outputs}
+
+speed_summary_all_speeding <- speed_data_analysis %>% 
+  group_by(recordnum, countdate, count_hr, speeding, volume_total) %>% 
+  summarize(all_speeding_count = sum(count)) %>% 
+  ungroup() %>% 
+  filter(speeding == "Speeding") %>% 
+  mutate(all_speeding_percent = all_speeding_count / volume_total)
+
+speed_summary_high_speeding <- speed_data_analysis %>% 
+  group_by(recordnum, countdate, count_hr, high_speeding, volume_total) %>% 
+  summarize(high_speeding_count = sum(count)) %>% 
+  ungroup() %>% 
+  filter(high_speeding == "High speeding") %>% 
+  mutate(high_speeding_percent = high_speeding_count / volume_total)
+
+speed_modeling_data <- speed_data_analysis %>%
+  distinct(recordnum, seg_id, countdate, count_hr, road, longitude, latitude, speedlimit, volume_total) %>% 
+  left_join(speed_summary_all_speeding %>% 
+              select(recordnum, countdate, count_hr, all_speeding_count, all_speeding_percent),
+            by = c("recordnum", "countdate", "count_hr")) %>% 
+  left_join(speed_summary_high_speeding %>% 
+              select(recordnum, countdate, count_hr, high_speeding_count, high_speeding_percent),
+            by = c("recordnum", "countdate", "count_hr")) %>% 
+  mutate(speed_measurement_month = month(countdate)) %>% 
+  mutate(weekday = wday(countdate, label = TRUE)) %>% 
+  mutate(day_of_week = if_else(weekday %in% c("Sat", "Sun"), "Weekend", "Weekday")) %>% 
+  select(seg_id, 
+         recordnum, 
+         speed_measurement_road = road,
+         speed_measurement_longitude = longitude,
+         speed_measurement_latitude = latitude,
+         speed_measurement_date = countdate,
+         speed_measurement_month,
+         speed_measurement_day_of_week = day_of_week,
+         speed_measurement_hour = count_hr,
+         speed_limit = speedlimit,
+         volume_total,
+         all_speeding_count,
+         all_speeding_percent,
+         high_speeding_count,
+         high_speeding_percent)
+
+```
+
+```{r Export modeling data, include=FALSE}
+
+# box_save_rds(speed_modeling_data, file_name = "speed_modeling_data_v1.rds", dir_id = box_processed_data_folder)
 
 ```
 
@@ -522,117 +758,6 @@ volume_data_initial %>%
 ```
 
 # Speeding descriptives
-
-```{r}
-
-# Speed data in long format to facilitate analyses
-speed_data_long <- speed_data_initial %>% 
-  # Join volume data
-  left_join(volume_data_initial %>% 
-              select(recordnum, countdate, count_hr, volcount)) %>% 
-  # Use totals from speed data only if there's no corresponding volume data
-  mutate(volume_total = coalesce(volcount, total)) %>% 
-  select(year, recordnum, speedlimit, road, fromlmt, tolmt, countdate, count_hr, volume_total, contains("speed_")) %>% 
-  pivot_longer(contains("speed_"), 
-               values_to = "count", 
-               names_to = c("range_low", "range_high"), 
-               names_pattern = "speed_(\\d+)_(\\d+)") %>% 
-  # Reduce speed categories
-  mutate(speed_category_binary =
-           if_else(range_high > speedlimit, "Speeding", "Not speeding")) %>% 
-  mutate(speed_category_detailed =
-           case_when(range_high <= speedlimit ~ "Not speeding",
-                     range_low > speedlimit + 20 ~ "More than 20mph over speed limit",
-                     range_low > speedlimit + 15 ~ "16-20mph over speed limit",
-                     range_low > speedlimit + 10 ~ "11-15mph over speed limit",
-                     range_low > speedlimit + 0 ~ "1-10mph over speed limit",
-                     .default = "CHECK")) %>% 
-  mutate(speed_category_detailed =
-           fct_relevel(speed_category_detailed,
-                      "Not speeding",
-                      "1-10mph over speed limit",
-                      "11-15mph over speed limit",
-                      "16-20mph over speed limit",
-                      "More than 20mph over speed limit"))
-
-```
-
-```{r Join to centerlines}
-
-centerlines <- box_read_rds(2139915462983)
-
-centerlines_ready <- centerlines %>% 
-  mutate(roadway_type = 
-           case_when(class == 0 ~ "Navy Yard",
-                     class == 1 ~ "Expressways",
-                     class == 2 ~ "Major Arterial",
-                     class == 3 ~ "Minor Arterial",
-                     class == 4 ~ "Collector",
-                     class == 5 ~ "Local",
-                     class == 6 ~ "Driveway",
-                     class == 9 ~ "Low Speed Ramps",
-                     class == 10 ~ "High Speed Ramps",
-                     class == 12 ~ "Non Travable",
-                     class == 14 ~ "City Boundary",
-                     class == 15 ~ "Walking Connector",
-                     class == 18 ~ "Traffic Controlled Crosswalks")) %>% 
-  # There are a few industrial/parking types of segments under class == 13 
-  # which is not labeled in the data dictionary and is excluded here.
-  # filter: removed 73 rows (<1%), 41,186 rows remaining
-  filter(!is.na(roadway_type)) %>% 
-  select(seg_id, roadway_type) %>% 
-  # Index column
-  mutate(centerlines_index = row_number()) %>% 
-  # Projected CRS
-  st_transform("EPSG:2272")
-  
-speed_data_coords <- speed_data_initial %>% 
-  distinct(recordnum, longitude, latitude) %>% 
-  st_as_sf(coords = c("longitude", "latitude"), crs = "EPSG:4326") %>% 
-  # Projected CRS
-  st_transform("EPSG:2272")
-
-# Find the index of the nearest line for each point
-nearest_line_indices <- st_nearest_feature(speed_data_coords, centerlines_ready)
-
-# Join by index
-# Geometry: measurement points
-speed_data_centerlines <- speed_data_coords %>% 
-  mutate(centerlines_index = centerlines_ready$centerlines_index[nearest_line_indices]) %>% 
-  left_join(centerlines_ready %>% st_drop_geometry())
-
-# Geometry: segments where measurements were made
-speed_data_centerlines_segments <- speed_data_centerlines %>%
-  st_drop_geometry() %>%
-  left_join(centerlines_ready %>% 
-              select(seg_id)) %>%
-  st_as_sf(crs = "EPSG:2272")
-
-```
-
-```{r Speed data ready for analysis}
-
-speed_data_analysis <- speed_data_long %>% 
-  left_join(speed_data_centerlines %>% 
-              st_drop_geometry() %>% 
-              select(recordnum, seg_id, roadway_type)) %>% 
-  mutate(time_of_day = 
-           case_when(count_hr >= 20 ~ "Off-peak",
-                     count_hr >= 16 ~ "Peak",
-                     count_hr >= 11 ~ "Off-peak",
-                     count_hr >= 7 ~ "Peak",
-                     count_hr >= 0 ~ "Off-peak")) %>% 
-  # Exclude highway-related measurement points
-  # filter: removed 16,464 rows (2%), 760,368 rows remaining
-  filter(!roadway_type %in% c("High Speed Ramps", "Low Speed Ramps", "Expressways")) %>% 
-  mutate(roadway_type =
-           fct_relevel(roadway_type,
-                       "Major Arterial",
-                       "Minor Arterial",
-                       "Collector",
-                       "Local"))
-
-```
 
 ## Characteristics of measurement locations
 
@@ -967,5 +1092,106 @@ off_peak_high_speeding_volume %>%
   coord_cartesian(ylim = c(0, 1))
 
 ```
+
+## Variability of speeding
+
+### Overall
+
+What is the distribution of speeding percentage, broken down by time of day and weekday?
+
+```{r, fig.dim = c(5, 15)}
+
+speed_summary_all_speeding %>% 
+  mutate(weekday = wday(countdate, label = TRUE)) %>% 
+  mutate(day_of_week = if_else(weekday %in% c("Sat", "Sun"), "Weekend", "Weekday")) %>% 
+  ggplot(aes(x = all_speeding_percent)) +
+  geom_density() +
+  facet_grid(count_hr ~ day_of_week)
+
+```
+
+### At the same measurement point
+
+Measurement points can be repeated for many days. The following shows the distribution of variability for percentage of speeding traffic, separately for each count hour and weekday. The measure shown is maximum speeding percent minus minimum speeding percent at a measurement point in that facet.
+
+```{r, fig.dim = c(5, 15)}
+
+speed_multiple_dates <- speed_summary_all_speeding %>% 
+  mutate(weekday = wday(countdate, label = TRUE)) %>% 
+  mutate(day_of_week = if_else(weekday %in% c("Sat", "Sun"), "Weekend", "Weekday")) %>% 
+  get_dupes(recordnum, count_hr, day_of_week)
+
+speed_multiple_dates_variation <- speed_multiple_dates %>% 
+  group_by(recordnum, count_hr, day_of_week) %>% 
+  summarize(sd = sd(all_speeding_percent), range = max(all_speeding_percent) - min(all_speeding_percent))
+
+speed_multiple_dates_variation %>% 
+  ggplot(aes(x = range)) +
+  geom_density() +
+  facet_grid(count_hr ~ day_of_week)
+
+```
+
+### Across directions at the same measurement point
+
+At some bidirectional streets, simultaneous but separate measurements are taken for each direction. What is the difference in speeding percentage across those directions, in the aggregate?
+
+```{r}
+
+speed_multiple_directions <- speed_summary_all_speeding %>% 
+  mutate(weekday = wday(countdate, label = TRUE)) %>% 
+  mutate(day_of_week = if_else(weekday %in% c("Sat", "Sun"), "Weekend", "Weekday")) %>% 
+  left_join(speed_data_initial %>% 
+              distinct(recordnum, road, fromlmt, tolmt, trafdir, header_cntdir)) %>% 
+  get_dupes(road, fromlmt, tolmt, trafdir, countdate, count_hr, day_of_week)
+
+speed_multiple_directions_variation <- speed_multiple_directions %>% 
+  group_by(road, fromlmt, tolmt, trafdir, countdate, count_hr, day_of_week) %>% 
+  summarize(sd = sd(all_speeding_percent), range = max(all_speeding_percent) - min(all_speeding_percent))
+
+speed_multiple_directions_variation %>% 
+  ggplot(aes(x = range)) +
+  geom_density()
+
+```
+
+For a control, we take the difference between the speeding rates of ~12k+ randomly selected measurement points matching in hour, day of week, and speed limit.
+
+```{r}
+
+speed_diff_check_base <- speed_modeling_data %>% 
+  select(speed_measurement_day_of_week, speed_measurement_hour, speed_limit, all_speeding_percent) %>% 
+  group_by(speed_measurement_day_of_week, speed_measurement_hour, speed_limit)
+
+set.seed(1234)
+speed_diff_check_a <- speed_diff_check_base %>% 
+  slice_sample(n = 100) %>% 
+  rename(all_speeding_percent_a = all_speeding_percent) %>% 
+  ungroup()
+
+set.seed(5678)
+speed_diff_check_b <- speed_diff_check_base %>% 
+  slice_sample(n = 100) %>% 
+  rename(all_speeding_percent_b = all_speeding_percent) %>% 
+  ungroup()
+
+speed_diff_comp <- speed_diff_check_a %>% 
+  bind_cols(speed_diff_check_b %>% select(all_speeding_percent_b)) %>% 
+  mutate(diff = abs(all_speeding_percent_a - all_speeding_percent_b))
+
+speed_diff_comp %>% 
+  ggplot(aes(x = diff)) +
+  geom_density()
+
+```
+
+
+
+
+
+
+
+
+
 
 
