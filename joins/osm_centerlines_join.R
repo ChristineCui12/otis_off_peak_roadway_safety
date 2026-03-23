@@ -32,6 +32,15 @@ phila_mask <- tigris::counties("PA") %>%
   # Extend by 20-ft buffer
   st_buffer(dist = 20)
 
+# Speed data (for coverage)
+speed_raw <- box_read_rds(2171353657698)
+
+speed_segments <- speed_raw %>% 
+  distinct(seg_id) %>% 
+  mutate(seg_id = as.character(seg_id)) %>% 
+  left_join(streets_raw) %>% 
+  st_as_sf(crs = "EPSG:2272")
+
 # Test for relevant columns -------------------------------------------------------------------
 
 # # Bus lane coverage very spotty, not reliable
@@ -294,6 +303,9 @@ mapview(joined_processed %>%
             left_join(streets_ready_to_join %>% select(seg_id)) %>% 
             st_as_sf(crs = "EPSG:2272"),
           color = "darkblue", label = "hovertext", layer.name = "Centerlines matched") +
+  mapview(speed_segments %>% 
+            filter(seg_id %in% joined_processed$seg_id),
+          color = "darkgreen", label = "seg_id", layer.name = "Speed segments matched") +
   mapview(osm_ready_to_join %>% 
             filter(!osm_id %in% joined_processed$osm_id) %>% 
             select(osm_id), 
@@ -301,7 +313,10 @@ mapview(joined_processed %>%
   mapview(streets_ready_to_join %>% 
             filter(!seg_id %in% joined_processed$seg_id) %>% 
             select(seg_id), 
-          color = "gray", label = "seg_id", layer.name = "Centerlines not matched")
+          color = "gray", label = "seg_id", layer.name = "Centerlines not matched") +
+  mapview(speed_segments %>% 
+            filter(!seg_id %in% joined_processed$seg_id),
+          color = "darkorange", label = "seg_id", layer.name = "Speed segments not matched")
 
 # Sample of centerlines
 set.seed(2718)
