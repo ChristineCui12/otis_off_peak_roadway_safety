@@ -206,6 +206,62 @@ streets_ready_to_join <- streets_raw %>%
 
 # mapview(streets_ready_to_join, zcol = "orientation_streets")
 
+# Find parallel streets -----------------------------------------------------------------------
+
+# Some wide roadways (e.g., parkside, girard, market, parkway, 38th, grant ave) are mapped as
+# two roadways side by side in OSM but not in centerlines.
+# This may cause issues with some roads overmatching or undermatching.
+# Where are they, for each dataset?
+
+# Find all intersections in a buffer. Then filter for close orientation and minimum distance apart.
+
+find_parallel_segments <- function(data, id_col, orientation_col) {
+
+  id_target <- str_c(id_col, ".target")
+  id_comp <- str_c(id_col, ".comp")
+  
+  orientation_target <- str_c(orientation_col, ".target")
+  orientation_comp <- str_c(orientation_col, ".comp")
+  
+  buffer <- data %>% 
+    st_buffer(dist = 60, endCapStyle="FLAT")
+  
+  joined_intersect <- data %>% 
+    st_join(data, suffix = c(".target", ".comp")) %>% 
+    st_drop_geometry()
+  
+  joined_target <- buffer %>% 
+    st_join(data, join = st_intersects, left = FALSE, suffix = c(".target", ".comp")) %>% 
+    st_drop_geometry() %>% 
+    anti_join(joined_intersect) %>% 
+    filter(abs(.data[[orientation_target]] - .data[[orientation_comp]]) <= 15)
+  
+  joined_lines_a <- joined_target %>% 
+    left_join(data %>% select(all_of(id_col)),
+              join_by({{ id_target }} == {{ id_col}} )) %>% 
+    st_as_sf(crs = "EPSG:2272")
+  
+  joined_lines_b <- joined_target %>% 
+    left_join(data %>% select(all_of(id_col)),
+              join_by({{ id_comp }} == {{ id_col}} )) %>% 
+    st_as_sf(crs = "EPSG:2272")
+  
+  joined_filtered <- joined_lines_a %>% 
+    mutate(distance = as.numeric(st_distance(., joined_lines_b, by_element = TRUE))) %>% 
+    filter(distance > 10)
+  
+}
+
+# Missing some parallel streets when the linestring isn't straight, plus includes complex intersections
+osm_parallel <- find_parallel_segments(osm_ready_to_join, "osm_id", "orientation_osm")
+
+mapview(osm_ready_to_join, color = "darkgray") + mapview(osm_parallel)
+
+# Overall ok but finds many local streets that overlap at ends
+streets_parallel <- find_parallel_segments(streets_ready_to_join, "seg_id", "orientation_streets")
+
+mapview(streets_ready_to_join, color = "darkgray") + mapview(streets_parallel)
+
 # Join ----------------------------------------------------------------------------------------
 
 # 116.73 sec elapsed
