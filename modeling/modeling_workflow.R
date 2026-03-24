@@ -24,22 +24,26 @@ speed <- box_read_rds(2171353657698) %>%
   mutate(seg_id = as.character(seg_id)) %>% 
   mutate(speed_measurement_hour = as.character(speed_measurement_hour)) %>% 
   mutate(speed_measurement_hour = str_pad(speed_measurement_hour, width = 2, side = "left", pad = "0")) %>% 
-  mutate(speed_measurement_month = as.character(speed_measurement_month))
+  mutate(speed_measurement_month = as.character(speed_measurement_month)) %>% 
+  mutate(speed_measurement_month = str_pad(speed_measurement_month, width = 2, side = "left", pad = "0")) 
 
 # OSM data
 osm_characteristics <- box_read_rds(2174904376082)
 
 # Crash data
 crashes <- box_read(2172557691734) %>% 
-  mutate(seg_id = as.character(seg_id))
+  mutate(seg_id = as.character(seg_id)) %>% 
+  mutate(crash_speed_involvement_rate = speeding / total_crashes)
 
 # Street network data
-network <- box_read_csv(2174990560003) %>% 
-  mutate(seg_id = as.character(seg_id)) %>% 
+network_main <- box_read_rds(2151757279199) %>% 
   mutate(bike_lane = 
            case_when(bike_any == TRUE ~ TRUE,
                      bike_any == FALSE ~ FALSE,
-                     is.na(bike_any) ~ FALSE))
+                     is.na(bike_any) ~ FALSE)) %>% 
+  mutate(width = na_if(surfawidth, 0))
+
+network_supplementary <- box_read_rds(2175268420062)
 
 # Compile modeling dataset --------------------------------------------------------------------
 
@@ -51,11 +55,16 @@ modeling_data <- speed %>%
               select(-parking_lanes), 
             by = "seg_id") %>% 
   left_join(crashes %>% 
-              select(seg_id, total_crashes, ksi_rate),
+              select(seg_id, total_crashes, ksi_rate, crash_speed_involvement_rate),
             by = "seg_id") %>% 
-  left_join(network %>% 
-              select(seg_id, road_type = class1_cs, bike_lane, parking, contains("count")),
+  left_join(network_main %>% 
+              select(seg_id, length, width, road_type = class1_cs, bike_lane, parking),
+            by = "seg_id") %>% 
+  left_join(network_supplementary %>% 
+              select(seg_id, count_poles, count_transit, count_calming, count_intersection_ctrl, count_camera),
             by = "seg_id")
+
+# box_save_rds(modeling_data, file_name = "modeling_data_v2.rds", dir_id = 372762671750)
 
 # Create training/test partition --------------------------------------------------------------
 
@@ -67,9 +76,9 @@ modeling_test <- testing(modeling_split)
 
 # Specify model -------------------------------------------------------------------------------
 
-# To do: specify hyperparameter search
-# mtry = tune(), min_n = tune(), trees = tune()
-rf_spec <- rand_forest() %>% 
+# mtry = tune(), min_n = tune()
+rf_spec <- 
+  rand_forest() %>% 
   set_engine("ranger", importance = "impurity") %>% 
   set_mode("regression")
 
@@ -88,8 +97,8 @@ recipe_minimal_rf <- recipe_0 %>%
               road_type,
               new_role = "predictor")
 
-# Full model (RF)
-recipe_full_rf <- recipe_0 %>% 
+# Main model (RF)
+recipe_main_rf <- recipe_0 %>% 
   update_role(speed_measurement_hour, 
               lanes,
               road_type,
@@ -106,14 +115,27 @@ recipe_full_rf <- recipe_0 %>%
               count_calming,
               count_intersection_ctrl,
               count_camera,
+              length,
+              width,
               total_crashes,
               ksi_rate,
               new_role = "predictor")
 
+# Specify hyperparameter search ---------------------------------------------------------------
+
+# Start course, move finer
+# rf_params <- extract_parameter_set_dials(rf_spec) %>%
+#   update(
+#     mtry = mtry(range = c(2, 15)),
+#     min_n = min_n(range = c(5, 50))
+#   )
+
+# rf_grid <- grid_space_filling(rf_params, size = 12,  type = "latin_hypercube")
+
 # Collect recipes and models into workflow set ------------------------------------------------
 
 models <-
-  workflow_set(preproc = list(minimal = recipe_minimal_rf, full = recipe_full_rf),
+  workflow_set(preproc = list(minimal = recipe_minimal_rf, main = recipe_main_rf),
                models = list(rf_spec),
                cross = TRUE)
 
@@ -143,12 +165,12 @@ collect_metrics(model_resamples)
 
 #   wflow_id            .config              preproc model       .metric .estimator   mean     n  std_err
 #   <chr>               <chr>                <chr>   <chr>       <chr>   <chr>       <dbl> <int>    <dbl>
-# 1 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.204     10 0.000550
-# 2 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.250     10 0.000702
-# 3 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.224     10 0.00431 
-# 4 full_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0622    10 0.000207
-# 5 full_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0947    10 0.000533
-# 6 full_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.889     10 0.00111 
+# 1 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.203     10 0.000616
+# 2 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.250     10 0.000762
+# 3 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.225     10 0.00401 
+# 4 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0605    10 0.000209
+# 5 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0930    10 0.000503
+# 6 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.892     10 0.000910
 
 # Fit to training data ------------------------------------------------------------------------
 
@@ -176,24 +198,41 @@ explainer <- explain_tidymodels(
   label  = "Random Forest"
 )
 
-pdp <- model_profile(
-  explainer,
-  groups = "lanes",        # feature to profile
-  type      = "partial",   # "partial" = PDP, "accumulated" = ALE
+model_profile(
+  explainer, 
+  type      = "partial",   
   variables = "speed_measurement_hour",
-  N         = NULL         # use all training rows (or set e.g. N = 200)
-)
+  N         = NULL        
+) %>% 
+  plot()
 
-plot(pdp)
+model_profile(
+  explainer, 
+  type      = "partial",   
+  variables = "lanes",
+  N         = NULL        
+) %>% 
+  plot()
+
+model_profile(
+  explainer, 
+  type      = "partial",   
+  variables = "lanes",
+  groups = "road_type",
+  N         = NULL        
+) %>% 
+  plot()
 
 # ---------------------------------------------------------------------------------------------
 
 # To do:
-# x- Read in Christine's dataset
-# x- Workflow set
-# x- Extract metrics from resamples
-# - PDPs
-# - Set up tuning regime
-# - Rerun
+# variable descriptions
+# read in dvrpc typologies and extra variables when demi is done
+# write out updated modeling data
+# Change road type variable to PennDOT value
+# Hyperparameter tuning
+# Error by important variable levels, spatial, focusing on use case
+
+
 
 
