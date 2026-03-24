@@ -329,6 +329,20 @@ merged_export <- merged_data_lanes %>%
 
 # box_save_rds(merged_export, file_name = "osm_matched_data_v1.rds", dir_id = box_processed_data_folder)
 
+# Notes ----------------------------------------------------------------------------
+
+# Some wide roadways (e.g., parkside, girard, market, parkway, 38th, grant ave) are mapped as
+# two roadways side by side in OSM, but are physically continuous pavement.
+# Some cases have been manually corrected.
+
+# Some curvy roads do not match even if there is an intersecting road because the start/end
+# points of segments are not same between centerlines and OSM, which means that the overall
+# orientation of the segments is too divergent between them even if they should match.
+# This effects some centerlines segments but not any with speed measurements.
+
+# OSM segments with lane count == 6 are very restricted. Good to be aware of.
+mapview(osm_clean %>% filter(lanes %in% c(4, 5, 6)), zcol = "lanes")
+
 # Test the join -----------------------------------------------------------------------------------
 
 # Tip: 'Show in new window' from viewer and use layer selection button on top right to toggle layers
@@ -459,24 +473,6 @@ mapview(join_no_dupes %>%
           layer.name = "OSM",
           zcol = "osm_id",
           color = mapviewPalette("mapviewSpectralColors")) 
-
-
-
-# Remaining issues ----------------------------------------------------------------------------
-
-# Some wide roadways (e.g., parkside, girard, market, parkway, 38th, grant ave) are mapped as
-# two roadways side by side in OSM, but are physically continuous pavement.
-# Some cases have been manually corrected.
-
-# Some curvy roads do not match even if there is an intersecting road because the start/end
-# points of segments are not same between centerlines and OSM, which means that the overall
-# orientation of the segments is too divergent between them even if they should match.
-# This effects some centerlines segments but not any with speed measurements.
-
-
-
-# ---------------------------------------------------------------------------------------------
-
 
 
 
