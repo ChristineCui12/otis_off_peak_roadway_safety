@@ -34,8 +34,6 @@ phila_mask <- tigris::counties("PA") %>%
   # Extend by 20-ft buffer
   st_buffer(dist = 20)
 
-<<<<<<< Updated upstream
-=======
 # Speed data (for coverage)
 speed_raw <- box_read_rds(2133989776667)
 speed_modeling <- box_read_rds(2171353657698)
@@ -46,7 +44,6 @@ speed_segments <- speed_modeling %>%
   left_join(streets_raw) %>% 
   st_as_sf(crs = "EPSG:2272")
 
->>>>>>> Stashed changes
 # Test for relevant columns -------------------------------------------------------------------
 
 # # Bus lane coverage very spotty, not reliable
@@ -245,15 +242,12 @@ joined_processed <- joined_raw %>%
   # Consider angles near the 0/180 degree wrap-around
   mutate(orientation_diff <- min(orientation_diff, 180 - orientation_diff)) %>% 
   # filter: removed 51,939 rows (68%), 24,418 rows remaining
-<<<<<<< Updated upstream
   filter(orientation_diff <= 15) %>% 
-=======
   filter(abs(orientation_osm - orientation_streets) <= 15) %>% 
   # Add any manual matches
   # Girard Ave @ 13th St speed measurement point
   add_row(seg_id = "440059", osm_id = "423965636") %>% 
   # Add explanatory text for mapview
->>>>>>> Stashed changes
   mutate(hovertext = str_c("<b>OSM:</b> ", osm_id, "<br><b>Centerlines:</b> ", seg_id, "<br>"))
 
 # Merge OSM characteristics -------------------------------------------------------------------
