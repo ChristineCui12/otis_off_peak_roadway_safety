@@ -45,6 +45,10 @@ network_main <- box_read_rds(2151757279199) %>%
 
 network_supplementary <- box_read_rds(2175268420062)
 
+network_bike <- box_read_rds(2178022998565)
+
+network_parcels <- box_read_rds(2178038226815)
+
 # Compile modeling dataset --------------------------------------------------------------------
 
 modeling_data <- speed %>% 
@@ -58,13 +62,21 @@ modeling_data <- speed %>%
               select(seg_id, total_crashes, ksi_rate, crash_speed_involvement_rate),
             by = "seg_id") %>% 
   left_join(network_main %>% 
-              select(seg_id, length, width, road_type = class1_cs, bike_lane, parking),
+              select(seg_id, length, width, road_type = class1_cs, parking),
             by = "seg_id") %>% 
   left_join(network_supplementary %>% 
               select(seg_id, count_poles, count_transit, count_calming, count_intersection_ctrl, count_camera),
-            by = "seg_id")
+            by = "seg_id") %>% 
+  mutate(year = year(speed_measurement_date)) %>% 
+  left_join(network_bike %>% 
+              select(seg_id, year, bike_lane_type),
+            by = c("seg_id", "year")) %>% 
+  left_join(network_parcels %>% 
+              select(seg_id, parcel_density),
+            by = "seg_id") %>% 
+  select(-year)
 
-# box_save_rds(modeling_data, file_name = "modeling_data_v2.rds", dir_id = 372762671750)
+# box_save_rds(modeling_data, file_name = "modeling_data_v3.rds", dir_id = 372762671750)
 
 # Create training/test partition --------------------------------------------------------------
 
@@ -108,8 +120,9 @@ recipe_main_rf <- recipe_0 %>%
               speed_limit,
               volume_total,                      # Total volume for hour measured
               sidewalk_status, 
-              bike_lane,
               parking,
+              bike_lane_type,
+              parcel_density,
               count_poles,
               count_transit,
               count_calming,
@@ -168,9 +181,9 @@ collect_metrics(model_resamples)
 # 1 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.203     10 0.000616
 # 2 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.250     10 0.000762
 # 3 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.225     10 0.00401 
-# 4 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0605    10 0.000209
-# 5 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0930    10 0.000503
-# 6 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.892     10 0.000910
+# 4 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0620    10 0.000208
+# 5 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0948    10 0.000479
+# 6 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.888     10 0.000891
 
 # Fit to training data ------------------------------------------------------------------------
 
@@ -185,6 +198,7 @@ best_workflow_id <- ranked_workflows %>%
 best_workflow <- models %>% 
   extract_workflow(id = best_workflow_id)
 
+# 13.587 sec elapsed
 tictoc::tic()
 best_fit <- fit(best_workflow, modeling_train)
 tictoc::toc()
@@ -225,13 +239,7 @@ model_profile(
 
 # ---------------------------------------------------------------------------------------------
 
-# To do:
-# variable descriptions
-# read in dvrpc typologies and extra variables when demi is done
-# write out updated modeling data
-# Change road type variable to PennDOT value
-# Hyperparameter tuning
-# Error by important variable levels, spatial, focusing on use case
+
 
 
 
