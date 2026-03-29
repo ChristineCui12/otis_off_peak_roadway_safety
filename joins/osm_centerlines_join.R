@@ -18,10 +18,12 @@ box_processed_data_folder <- 362958210990
 # Read data -----------------------------------------------------------------------------------
 
 # OSM data
+# /Box-Box/Phila_OTIS/data/processed/osm_roads_data_all.rds
 osm_raw <- box_read_rds(2138013253852) %>% 
   st_transform("EPSG:2272")
 
 # Street segments
+# /Box-Box/Phila_OTIS/data/processed/base_network_clean.rds
 streets_raw <- box_read_rds(2151757279199) %>% 
   st_transform("EPSG:2272")
 
@@ -31,6 +33,16 @@ phila_mask <- tigris::counties("PA") %>%
   st_transform("EPSG:2272") %>% 
   # Extend by 20-ft buffer
   st_buffer(dist = 20)
+
+# Speed data (for coverage)
+speed_raw <- box_read_rds(2133989776667)
+speed_modeling <- box_read_rds(2171353657698)
+
+speed_segments <- speed_modeling %>% 
+  distinct(seg_id) %>% 
+  mutate(seg_id = as.character(seg_id)) %>% 
+  left_join(streets_raw) %>% 
+  st_as_sf(crs = "EPSG:2272")
 
 # Test for relevant columns -------------------------------------------------------------------
 
@@ -134,7 +146,9 @@ osm_clean <- osm_selected %>%
   mutate(lanes = as.numeric(lanes)) %>% 
   # filter: removed 12 rows (<1%), 11,635 rows remaining
   filter(lanes <= 7) %>% 
-  select(osm_id, lanes, parking_lanes, sidewalk_status)
+  # Calculate segment length
+  mutate(osm_length = as.numeric(st_length(.))) %>% 
+  select(osm_id, osm_length, lanes, parking_lanes, sidewalk_status)
 
 # osm_clean %>% tabyl(parking_lanes)
  # parking_lanesgeometry     n    percent valid_percent
@@ -176,7 +190,7 @@ get_orientation <- function(start, end) {
   # 0 is East, pi/2 is North
   angle <- atan2(end[2] - start[2], end[1] - start[1])
   
-  # Convert to degrees (0-360)
+  # Convert to degrees (0-179)
   angle_deg <- (angle * 180 / pi) %% 360 %>% 
     round(-1) %>% 
     if_else(. >= 180, . - 180, .)
@@ -192,8 +206,6 @@ osm_ready_to_join <- osm_clean %>%
   ) %>% 
   select(osm_id, orientation_osm)
 
-# mapview(osm_ready_to_join, zcol = "orientation_osm")
-
 streets_ready_to_join <- streets_raw %>%
   select(seg_id) %>% 
   mutate(
@@ -204,7 +216,68 @@ streets_ready_to_join <- streets_raw %>%
   ) %>% 
   select(seg_id, orientation_streets)
 
-# mapview(streets_ready_to_join, zcol = "orientation_streets")
+mapview(streets_ready_to_join, zcol = "orientation_streets", color = mapviewPalette("mapviewSpectralColors")) +
+  mapview(osm_ready_to_join, zcol = "orientation_osm", color = mapviewPalette("mapviewTopoColors"))
+
+# Test for parallel segments ------------------------------------------------------------------
+
+
+
+# Find parallel streets -----------------------------------------------------------------------
+
+# Some wide roadways (e.g., parkside, girard, market, parkway, 38th, grant ave) are mapped as
+# two roadways side by side in OSM but not in centerlines.
+# This may cause issues with some roads overmatching or undermatching.
+# Where are they, for each dataset?
+
+# Find all intersections in a buffer. Then filter for close orientation and minimum distance apart.
+
+find_parallel_segments <- function(data, id_col, orientation_col) {
+
+  id_target <- str_c(id_col, ".target")
+  id_comp <- str_c(id_col, ".comp")
+  
+  orientation_target <- str_c(orientation_col, ".target")
+  orientation_comp <- str_c(orientation_col, ".comp")
+  
+  buffer <- data %>% 
+    st_buffer(dist = 60, endCapStyle="FLAT")
+  
+  joined_intersect <- data %>% 
+    st_join(data, suffix = c(".target", ".comp")) %>% 
+    st_drop_geometry()
+  
+  joined_target <- buffer %>% 
+    st_join(data, join = st_intersects, left = FALSE, suffix = c(".target", ".comp")) %>% 
+    st_drop_geometry() %>% 
+    anti_join(joined_intersect) %>% 
+    filter(abs(.data[[orientation_target]] - .data[[orientation_comp]]) <= 15)
+  
+  joined_lines_a <- joined_target %>% 
+    left_join(data %>% select(all_of(id_col)),
+              join_by({{ id_target }} == {{ id_col}} )) %>% 
+    st_as_sf(crs = "EPSG:2272")
+  
+  joined_lines_b <- joined_target %>% 
+    left_join(data %>% select(all_of(id_col)),
+              join_by({{ id_comp }} == {{ id_col}} )) %>% 
+    st_as_sf(crs = "EPSG:2272")
+  
+  joined_filtered <- joined_lines_a %>% 
+    mutate(distance = as.numeric(st_distance(., joined_lines_b, by_element = TRUE))) %>% 
+    filter(distance > 10)
+  
+}
+
+# Missing some parallel streets when the linestring isn't straight, plus includes complex intersections
+osm_parallel <- find_parallel_segments(osm_ready_to_join, "osm_id", "orientation_osm")
+
+mapview(osm_ready_to_join, color = "darkgray") + mapview(osm_parallel)
+
+# Overall ok but finds many local streets that overlap at ends
+streets_parallel <- find_parallel_segments(streets_ready_to_join, "seg_id", "orientation_streets")
+
+mapview(streets_ready_to_join, color = "darkgray") + mapview(streets_parallel)
 
 # Join ----------------------------------------------------------------------------------------
 
@@ -221,10 +294,111 @@ tictoc::toc()
 
 joined_processed <- joined_raw %>% 
   # Only accept a join if orientation is same
+  mutate(orientation_diff = abs(orientation_osm - orientation_streets)) %>% 
+  # Consider angles near the 0/180 degree wrap-around
+  mutate(orientation_diff <- min(orientation_diff, 180 - orientation_diff)) %>% 
   # filter: removed 51,939 rows (68%), 24,418 rows remaining
+  filter(orientation_diff <= 15) %>% 
   filter(abs(orientation_osm - orientation_streets) <= 15) %>% 
+  # Add any manual matches
+  # Girard Ave @ 13th St speed measurement point
+  add_row(seg_id = "440059", osm_id = "423965636") %>% 
+  # Add explanatory text for mapview
   mutate(hovertext = str_c("<b>OSM:</b> ", osm_id, "<br><b>Centerlines:</b> ", seg_id, "<br>"))
+
+# Merge OSM characteristics -------------------------------------------------------------------
+
+merged_data_initial <- joined_processed %>% 
+  select(-hovertext, -contains("orientation")) %>% 
+  left_join(osm_clean %>% 
+              st_drop_geometry(),
+              by = "osm_id") %>% 
+  # Manually correct OSM lane counts for segments where the roadway is divided in two in OSM
+  # but is physically one surface.
+  # mutate: changed 8 values (<1%) of 'lanes' (0 new NAs)
+  mutate(lanes =
+           # Henry Ave speed measurement point
+           case_when(osm_id %in% (joined_processed %>% filter(seg_id == "700001") %>% pull(osm_id)) ~
+                       4,
+                     .default = lanes))
+
+# # Check which centerlines segments have multiple OSM matches
+# merged_data_osm_multiple <- merged_data_initial %>% 
+#   get_dupes(seg_id) %>% 
+#   group_by(seg_id) %>% 
+#   mutate(distinct_lane_counts = n_distinct(lanes, na.rm = TRUE)) %>% 
+#   mutate(distinct_parking_lanes = n_distinct(parking_lanes, na.rm = TRUE)) %>% 
+#   mutate(distinct_sidewalk_status = n_distinct(sidewalk_status, na.rm = TRUE))
+
+# Per each centerlines segment, take the most common OSM value for each of the
+# 3 OSM variables; if there is a tie, take the value from the longest OSM segment
+merged_data_lanes <- merged_data_initial %>% 
+  group_by(seg_id, lanes) %>% 
+  summarize(n = n(), longest_osm = max(osm_length)) %>% 
+  ungroup() %>% 
+  # If the OSM variable is missing, set count to zero so NA isn't favored over non-missing values
+  mutate(n = if_else(is.na(lanes), 0, n)) %>% 
+  group_by(seg_id) %>% 
+  # slice_max (grouped): removed 1,790 rows (11%), 14,409 rows remaining (removed 0 groups, 13,363 groups remaining)
+  slice_max(order_by = n, with_ties = TRUE) %>% 
+  # slice_max (grouped): removed 1,046 rows (7%), 13,363 rows remaining (removed 0 groups, 13,363 groups remaining)
+  slice_max(order_by = longest_osm, with_ties = FALSE) %>% 
+  ungroup()
+
+merged_data_parking <- merged_data_initial %>% 
+  group_by(seg_id, parking_lanes) %>% 
+  summarize(n = n(), longest_osm = max(osm_length)) %>% 
+  ungroup() %>% 
+  # If the OSM variable is missing, set count to zero so NA isn't favored over non-missing values
+  mutate(n = if_else(is.na(parking_lanes), 0, n)) %>% 
+  group_by(seg_id) %>% 
+  # slice_max (grouped): removed 561 rows (4%), 13,474 rows remaining (removed 0 groups, 13,363 groups remaining)
+  slice_max(order_by = n, with_ties = TRUE) %>% 
+  # slice_max (grouped): removed 111 rows (1%), 13,363 rows remaining (removed 0 groups, 13,363 groups remaining)
+  slice_max(order_by = longest_osm, with_ties = FALSE) %>% 
+  ungroup()
   
+merged_data_sidewalk <- merged_data_initial %>% 
+  group_by(seg_id, sidewalk_status) %>% 
+  summarize(n = n(), longest_osm = max(osm_length)) %>% 
+  ungroup() %>% 
+  # If the OSM variable is missing, set count to zero so NA isn't favored over non-missing values
+  mutate(n = if_else(is.na(sidewalk_status), 0, n)) %>% 
+  group_by(seg_id) %>% 
+  # slice_max (grouped): removed 1,396 rows (9%), 13,698 rows remaining (removed 0 groups, 13,363 groups remaining)
+  slice_max(order_by = n, with_ties = TRUE) %>% 
+  # slice_max (grouped): removed 335 rows (2%), 13,363 rows remaining (removed 0 groups, 13,363 groups remaining)
+  slice_max(order_by = longest_osm, with_ties = FALSE) %>% 
+  ungroup()
+
+# Final 1-to-1 dataset
+merged_export <- merged_data_lanes %>% 
+  select(seg_id, lanes) %>% 
+  left_join(merged_data_parking %>% 
+              select(seg_id, parking_lanes),
+            by = "seg_id") %>% 
+  left_join(merged_data_sidewalk %>% 
+              select(seg_id, sidewalk_status),
+            by = "seg_id")
+
+# Export --------------------------------------------------------------------------------------
+
+# box_save_rds(merged_export, file_name = "osm_matched_data_v1.rds", dir_id = box_processed_data_folder)
+
+# Notes ----------------------------------------------------------------------------
+
+# Some wide roadways (e.g., parkside, girard, market, parkway, 38th, grant ave) are mapped as
+# two roadways side by side in OSM, but are physically continuous pavement.
+# Some cases have been manually corrected.
+
+# Some curvy roads do not match even if there is an intersecting road because the start/end
+# points of segments are not same between centerlines and OSM, which means that the overall
+# orientation of the segments is too divergent between them even if they should match.
+# This effects some centerlines segments but not any with speed measurements.
+
+# OSM segments with lane count == 6 are very restricted. Good to be aware of.
+mapview(osm_clean %>% filter(lanes %in% c(4, 5, 6)), zcol = "lanes")
+
 # Test the join -----------------------------------------------------------------------------------
 
 # Tip: 'Show in new window' from viewer and use layer selection button on top right to toggle layers
@@ -238,6 +412,9 @@ mapview(joined_processed %>%
             left_join(streets_ready_to_join %>% select(seg_id)) %>% 
             st_as_sf(crs = "EPSG:2272"),
           color = "darkblue", label = "hovertext", layer.name = "Centerlines matched") +
+  mapview(speed_segments %>% 
+            filter(seg_id %in% joined_processed$seg_id),
+          color = "darkgreen", label = "seg_id", layer.name = "Speed segments matched") +
   mapview(osm_ready_to_join %>% 
             filter(!osm_id %in% joined_processed$osm_id) %>% 
             select(osm_id), 
@@ -245,7 +422,10 @@ mapview(joined_processed %>%
   mapview(streets_ready_to_join %>% 
             filter(!seg_id %in% joined_processed$seg_id) %>% 
             select(seg_id), 
-          color = "gray", label = "seg_id", layer.name = "Centerlines not matched")
+          color = "gray", label = "seg_id", layer.name = "Centerlines not matched") +
+  mapview(speed_segments %>% 
+            filter(!seg_id %in% joined_processed$seg_id),
+          color = "darkorange", label = "seg_id", layer.name = "Speed segments not matched")
 
 # Sample of centerlines
 set.seed(2718)
@@ -253,8 +433,8 @@ streets_sample <- streets_ready_to_join %>%
   slice_sample(n = 50)
 
 # Checks:
-# Centerlines not matched not close to OSM matched or not matched
-# OSM not matched not close to centerlines matched or not matched
+# Centerlines not matched: not close to any OSM
+# OSM not matched: not close to any centerlines
 # Centerlines matched overlaps with OSM matched
 mapview(joined_processed %>% 
           filter(seg_id %in% streets_sample$seg_id) %>% 
@@ -278,8 +458,8 @@ osm_sample <- osm_ready_to_join %>%
   slice_sample(n = 50)
 
 # Checks:
-# Centerlines not matched not close to OSM matched or not matched
-# OSM not matched not close to centerlines matched or not matched
+# Centerlines not matched: not close to any OSM
+# OSM not matched: not close to any centerlines
 # Centerlines matched overlaps with OSM matched
 mapview(joined_processed %>% 
           filter(osm_id %in% osm_sample$osm_id) %>% 
@@ -297,15 +477,66 @@ mapview(joined_processed %>%
             select(seg_id), 
           color = "darkgray", label = "hovertext", layer.name = "All centerlines not matched")
 
-# Remaining issues ----------------------------------------------------------------------------
+# All joins which are 1 OSM -> multiple centerlines
+osm_join_dupes <- joined_processed %>% 
+  get_dupes(osm_id)
 
-# Some wide roadways (e.g., parkside, girard, market, parkway, 38th, grant ave) are mapped as
-# two roadways side by side in OSM but not in centerlines.
-# This may cause issues with some roads overmatching or undermatching.
+mapview(osm_join_dupes %>% 
+          left_join(osm_ready_to_join %>% select(osm_id)) %>% 
+          st_as_sf(crs = "EPSG:2272"), 
+        label = "hovertext", 
+        layer.name = "OSM",
+        zcol = "osm_id",
+        color = mapviewPalette("mapviewTopoColors")) +
+  mapview(osm_join_dupes %>% 
+            left_join(streets_ready_to_join %>% select(seg_id)) %>% 
+            st_as_sf(crs = "EPSG:2272"), 
+          label = "hovertext", 
+          layer.name = "Centerlines",
+          zcol = "seg_id",
+          color = mapviewPalette("mapviewSpectralColors"))
 
-# The OSM attributes (lane count, parking, sidewalks) have to be normalized at the scale of
-# the centerlines data. If a centerlines segment has multiple OSM segments, need to figure
-# out how to aggregate/summarize OSM data.
+# All joins which are 1 centerlines -> multiple OSM
+streets_join_dupes <- joined_processed %>% 
+  get_dupes(seg_id)
+
+mapview(streets_join_dupes %>% 
+          left_join(streets_ready_to_join %>% select(seg_id)) %>% 
+          st_as_sf(crs = "EPSG:2272"), 
+        label = "hovertext", 
+        layer.name = "Centerlines",
+        zcol = "seg_id",
+        color = mapviewPalette("mapviewTopoColors")) +
+  mapview(streets_join_dupes %>% 
+            left_join(osm_ready_to_join %>% select(osm_id)) %>% 
+            st_as_sf(crs = "EPSG:2272"), 
+          label = "hovertext", 
+          layer.name = "OSM",
+          zcol = "osm_id",
+          color = mapviewPalette("mapviewSpectralColors")) 
+
+# All joins which are 1 centerlines -> 1 OSM
+join_no_dupes <- joined_processed %>% 
+  # filter: removed 23,845 rows (98%), 573 rows remaining
+  filter(!seg_id %in% streets_join_dupes$seg_id &
+           !osm_id %in% osm_join_dupes$osm_id)
+
+mapview(join_no_dupes %>% 
+          left_join(streets_ready_to_join %>% select(seg_id)) %>% 
+          st_as_sf(crs = "EPSG:2272"), 
+        label = "hovertext", 
+        layer.name = "Centerlines",
+        zcol = "seg_id",
+        color = mapviewPalette("mapviewTopoColors")) +
+  mapview(join_no_dupes %>% 
+            left_join(osm_ready_to_join %>% select(osm_id)) %>% 
+            st_as_sf(crs = "EPSG:2272"), 
+          label = "hovertext", 
+          layer.name = "OSM",
+          zcol = "osm_id",
+          color = mapviewPalette("mapviewSpectralColors")) 
+
+
 
 
 
