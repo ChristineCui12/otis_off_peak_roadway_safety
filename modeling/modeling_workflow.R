@@ -17,6 +17,8 @@ box_auth()
 box_raw_data_folder <- 362958311858
 box_processed_data_folder <- 362958210990
 
+theme_set(theme_light())
+
 # Read data -----------------------------------------------------------------------------------
 
 # Speed data
@@ -212,30 +214,77 @@ explainer <- explain_tidymodels(
   label  = "Random Forest"
 )
 
-model_profile(
-  explainer, 
-  type      = "partial",   
-  variables = "speed_measurement_hour",
-  N         = NULL        
-) %>% 
-  plot()
+pdp_speed_measurement_hour <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "speed_measurement_hour",
+                N         = NULL) 
 
-model_profile(
-  explainer, 
-  type      = "partial",   
-  variables = "lanes",
-  N         = NULL        
-) %>% 
-  plot()
+pdp_speed_measurement_hour_plot <- 
+  as_tibble(pdp_speed_measurement_hour$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(size = 1.2, alpha = 0.8, color = "#ff9500") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted probability of speeding by hour of day",
+       y = "Probability of speeding",
+       x = "Hour of day (24-hour time)")
 
-model_profile(
-  explainer, 
-  type      = "partial",   
-  variables = "lanes",
-  groups = "road_type",
-  N         = NULL        
-) %>% 
-  plot()
+pdp_speed_measurement_hour_plot
+
+# ggsave(plot = pdp_speed_measurement_hour_plot, filename = "pdp_hour.svg", width = 6, height = 4)
+
+pdp_lanes <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "lanes",
+                N         = NULL) 
+
+pdp_lanes_plot <- 
+  as_tibble(pdp_lanes$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(size = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted probability of speeding by number of lanes",
+       y = "Probability of speeding",
+       x = "Number of lanes in roadway")
+
+pdp_lanes_plot
+
+# ggsave(plot = pdp_lanes_plot, filename = "pdp_lanes.svg", width = 6, height = 4)
+
+pdp_road_type_by_lanes <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "lanes",
+                groups = "road_type",
+                N         = NULL)
+
+pdp_road_type_by_lanes_plot <- 
+  as_tibble(pdp_road_type_by_lanes$agr_profiles) %>% 
+  mutate(`_groups_` = 
+           fct_relevel(`_groups_`, 
+                       "Major Arterial", 
+                       "Minor Arterial", 
+                       "Collector Residential", 
+                       "Local Residential")) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`)) +
+  geom_line(size = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  scale_color_manual(values = c("#ff9500", "#ffd000", "#00badb", "#156082")) +
+  labs(title = "Predicted probability of speeding by number of lanes and road type",
+       y = "Probability of speeding",
+       x = "Number of lanes in roadway",
+       color = "Road type")
+
+pdp_road_type_by_lanes_plot
+
+# ggsave(plot = pdp_road_type_by_lanes_plot, filename = "pdp_road_type_by_lanes.svg", width = 7, height = 4)
 
 # ---------------------------------------------------------------------------------------------
 
