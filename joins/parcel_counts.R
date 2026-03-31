@@ -167,9 +167,8 @@ segment_parcels <- opa_streets_join %>%
            case_when(seg_id == "980590" ~ 22,
                      seg_id == "980589" ~ 22,
                      .default = parcel_count)) %>% 
-  mutate(parcel_density = segment_length / parcel_count) %>% 
-  mutate(seg_id = as.character(seg_id)) %>% 
-  select(-segment_length)
+  mutate(parcel_density = parcel_count / segment_length) %>% 
+  mutate(seg_id = as.character(seg_id))
 
 # test <- streets_raw %>% mutate(seg_id = as.character(seg_id)) %>% inner_join(segment_parcels, by = "seg_id")
 # mapview::mapview(test, zcol = "parcel_count")

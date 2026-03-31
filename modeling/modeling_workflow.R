@@ -21,6 +21,8 @@ theme_set(theme_light())
 
 # Read data -----------------------------------------------------------------------------------
 
+# box_ls(362958210990)
+
 # Speed data
 speed <- box_read_rds(2171353657698) %>% 
   mutate(seg_id = as.character(seg_id)) %>% 
@@ -43,11 +45,25 @@ network_main <- box_read_rds(2151757279199) %>%
            case_when(bike_any == TRUE ~ TRUE,
                      bike_any == FALSE ~ FALSE,
                      is.na(bike_any) ~ FALSE)) %>% 
-  mutate(width = na_if(surfawidth, 0))
+  mutate(width_rms = na_if(surfawidth, 0)) %>% 
+  rename(width_dvrpc = NEW_WID) %>% 
+  mutate(width = coalesce(width_rms, width_dvrpc))
 
 network_supplementary <- box_read_rds(2175268420062)
 
-network_bike <- box_read_rds(2178022998565)
+network_bike <- box_read_rds(2178022998565) %>% 
+  # Clean up bike categories
+  mutate(bike_lane_type_simple =
+           case_when(bike_lane_type %in% c("Advisory Bike Lane", "Sharrow") ~ 
+                       "Sharrow",
+                     bike_lane_type %in% c("Bus/Bike Lane", "Painted Bike Lane") ~ 
+                       "Painted",
+                     bike_lane_type %in% c("None", "Unknown") ~ 
+                       "None",
+                     bike_lane_type %in% c("On-Street Separated Bike Lane", "Raised Separated Bike Lane", "Shared Use Sidepath") ~ 
+                       "Separated",
+                     is.na(bike_lane_type) ~ "None",
+                     .default = "CHECK"))
 
 network_parcels <- box_read_rds(2178038226815)
 
@@ -64,21 +80,30 @@ modeling_data <- speed %>%
               select(seg_id, total_crashes, ksi_rate, crash_speed_involvement_rate),
             by = "seg_id") %>% 
   left_join(network_main %>% 
-              select(seg_id, length, width, road_type = class1_cs, parking),
+              select(seg_id, 
+                     length, width, 
+                     road_classification_city = class1_cs, 
+                     road_classification_fhwa = fhwa_func_desc, 
+                     parking,
+                     arterial_type_dvrpc = TYPOLOGY__),
             by = "seg_id") %>% 
   left_join(network_supplementary %>% 
               select(seg_id, count_poles, count_transit, count_calming, count_intersection_ctrl, count_camera),
             by = "seg_id") %>% 
   mutate(year = year(speed_measurement_date)) %>% 
   left_join(network_bike %>% 
-              select(seg_id, year, bike_lane_type),
+              select(seg_id, year, bike_lane_type_simple),
             by = c("seg_id", "year")) %>% 
+  # Bike lane data are presumably complete, so NA means no lane
+  mutate(bike_lane_type_simple = replace_na(bike_lane_type_simple, "None")) %>% 
+  # If there is no join, there are 0 properties on that segment
   left_join(network_parcels %>% 
               select(seg_id, parcel_density),
             by = "seg_id") %>% 
+  mutate(parcel_density = replace_na(parcel_density, 0)) %>% 
   select(-year)
 
-# box_save_rds(modeling_data, file_name = "modeling_data_v3.rds", dir_id = 372762671750)
+# box_save_rds(modeling_data, file_name = "modeling_data_v4.rds", dir_id = 372762671750)
 
 # Create training/test partition --------------------------------------------------------------
 
@@ -104,18 +129,25 @@ rf_spec <-
 recipe_0 <- recipe(modeling_train) %>% 
   update_role(all_speeding_percent, new_role = "outcome")
 
-# Minimal model (RF)
-recipe_minimal_rf <- recipe_0 %>% 
+# Minimal model (RF): City road classification
+recipe_minimal_rf_city <- recipe_0 %>% 
   update_role(speed_measurement_hour, 
               lanes,
-              road_type,
+              road_classification_city,
               new_role = "predictor")
 
-# Main model (RF)
-recipe_main_rf <- recipe_0 %>% 
+# Minimal model (RF): FHWA road classification
+recipe_minimal_rf_fhwa <- recipe_0 %>% 
   update_role(speed_measurement_hour, 
               lanes,
-              road_type,
+              road_classification_fhwa,
+              new_role = "predictor")
+
+# Main model (RF): City road classification
+recipe_main_rf_city <- recipe_0 %>% 
+  update_role(speed_measurement_hour, 
+              lanes,
+              road_classification_city,
               speed_measurement_road,            # Fixed effect for road name
               speed_measurement_month,
               speed_measurement_day_of_week,
@@ -123,7 +155,32 @@ recipe_main_rf <- recipe_0 %>%
               volume_total,                      # Total volume for hour measured
               sidewalk_status, 
               parking,
-              bike_lane_type,
+              bike_lane_type_simple,
+              parcel_density,
+              count_poles,
+              count_transit,
+              count_calming,
+              count_intersection_ctrl,
+              count_camera,
+              length,
+              width,
+              total_crashes,
+              ksi_rate,
+              new_role = "predictor")
+
+# Main model (RF): FHWA road classification
+recipe_main_rf_fhwa <- recipe_0 %>% 
+  update_role(speed_measurement_hour, 
+              lanes,
+              road_classification_fhwa,
+              speed_measurement_road,            # Fixed effect for road name
+              speed_measurement_month,
+              speed_measurement_day_of_week,
+              speed_limit,
+              volume_total,                      # Total volume for hour measured
+              sidewalk_status, 
+              parking,
+              bike_lane_type_simple,
               parcel_density,
               count_poles,
               count_transit,
@@ -150,7 +207,10 @@ recipe_main_rf <- recipe_0 %>%
 # Collect recipes and models into workflow set ------------------------------------------------
 
 models <-
-  workflow_set(preproc = list(minimal = recipe_minimal_rf, main = recipe_main_rf),
+  workflow_set(preproc = list(minimal_city = recipe_minimal_rf_city, 
+                              minimal_fhwa = recipe_minimal_rf_fhwa, 
+                              main_city = recipe_main_rf_city,
+                              main_fhwa = recipe_main_rf_fhwa),
                models = list(rf_spec),
                cross = TRUE)
 
@@ -178,14 +238,23 @@ tictoc::toc()
 
 collect_metrics(model_resamples) 
 
-#   wflow_id            .config              preproc model       .metric .estimator   mean     n  std_err
-#   <chr>               <chr>                <chr>   <chr>       <chr>   <chr>       <dbl> <int>    <dbl>
-# 1 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.203     10 0.000616
-# 2 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.250     10 0.000762
-# 3 minimal_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.225     10 0.00401 
-# 4 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0620    10 0.000208
-# 5 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0948    10 0.000479
-# 6 main_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.888     10 0.000891
+#    wflow_id                 .config              preproc model       .metric .estimator   mean     n  std_err
+#    <chr>                    <chr>                <chr>   <chr>       <chr>   <chr>       <dbl> <int>    <dbl>
+#  1 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.203     10 0.000616
+#  2 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.250     10 0.000762
+#  3 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.225     10 0.00401 
+
+#  4 minimal_fhwa_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.194     10 0.000660
+#  5 minimal_fhwa_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.243     10 0.000821
+#  6 minimal_fhwa_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.260     10 0.00422 
+
+#  7 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0607    10 0.000225
+#  8 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0938    10 0.000500
+#  9 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.890     10 0.000904
+
+# 10 main_fhwa_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0605    10 0.000216
+# 11 main_fhwa_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0936    10 0.000515
+# 12 main_fhwa_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.890     10 0.000949
 
 # Fit to training data ------------------------------------------------------------------------
 
@@ -223,7 +292,7 @@ pdp_speed_measurement_hour <-
 pdp_speed_measurement_hour_plot <- 
   as_tibble(pdp_speed_measurement_hour$agr_profiles) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
-  geom_line(size = 1.2, alpha = 0.8, color = "#ff9500") +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#ff9500") +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
@@ -244,7 +313,7 @@ pdp_lanes <-
 pdp_lanes_plot <- 
   as_tibble(pdp_lanes$agr_profiles) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
-  geom_line(size = 1.2, alpha = 0.8, color = "#156082") +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
@@ -260,23 +329,23 @@ pdp_road_type_by_lanes <-
   model_profile(explainer, 
                 type      = "partial",   
                 variables = "lanes",
-                groups = "road_type",
+                groups = "road_classification_fhwa",
                 N         = NULL)
 
 pdp_road_type_by_lanes_plot <- 
   as_tibble(pdp_road_type_by_lanes$agr_profiles) %>% 
-  mutate(`_groups_` = 
-           fct_relevel(`_groups_`, 
-                       "Major Arterial", 
-                       "Minor Arterial", 
-                       "Collector Residential", 
-                       "Local Residential")) %>% 
+  # mutate(`_groups_` = 
+  #          fct_relevel(`_groups_`, 
+  #                      "Major Arterial", 
+  #                      "Minor Arterial", 
+  #                      "Collector Residential", 
+  #                      "Local Residential")) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`)) +
-  geom_line(size = 1.2, alpha = 0.8) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  scale_color_manual(values = c("#ff9500", "#ffd000", "#00badb", "#156082")) +
+  # scale_color_manual(values = c("#ff9500", "#ffd000", "#00badb", "#156082")) +
   labs(title = "Predicted probability of speeding by number of lanes and road type",
        y = "Probability of speeding",
        x = "Number of lanes in roadway",
@@ -286,10 +355,24 @@ pdp_road_type_by_lanes_plot
 
 # ggsave(plot = pdp_road_type_by_lanes_plot, filename = "pdp_road_type_by_lanes.svg", width = 7, height = 4)
 
-# ---------------------------------------------------------------------------------------------
+pdp_calming <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "count_calming",
+                N         = NULL) 
 
+pdp_calming_plot <- 
+  as_tibble(pdp_calming$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted probability of speeding by number of traffic calming interventions",
+       y = "Probability of speeding",
+       x = "Number of calming interventions")
 
-
+pdp_calming_plot
 
 
 
