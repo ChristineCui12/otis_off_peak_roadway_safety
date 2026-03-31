@@ -1,5 +1,6 @@
 # Purpose -------------------------------------------------------------------------------------
-# Compare OSM and DVRPC lane counts, prepare interactive map for manually checking data quality,
+# Compare OSM and DVRPC lane counts and other roadway characteristics, 
+# prepare interactive map for manually checking data quality,
 # and write out CSV for reporting.
 
 # Preliminaries -------------------------------------------------------------------------------
