@@ -49,11 +49,15 @@ network_main <- box_read_rds(2151757279199) %>%
   rename(width_dvrpc = NEW_WID, 
          lanes_dvrpc = NEW_LANES,
          arterial_type_dvrpc = TYPOLOGY__,
+         divided_roadway = DIV_RDWY,
          road_classification_city = class1_cs, 
          road_classification_fhwa = fhwa_func_desc) %>% 
-  mutate(width = coalesce(width_rms, width_dvrpc))
+  mutate(width = coalesce(width_rms, width_dvrpc)) %>% 
+  mutate(divided_roadway = case_when(divided_roadway == 1 ~ TRUE,
+                                     divided_roadway == 0 ~ FALSE))
 
-network_supplementary <- box_read_rds(2175268420062)
+network_supplementary <- box_read_rds(2175268420062) %>% 
+  mutate(traffic_calming = count_calming > 0)
 
 network_bike <- box_read_rds(2178022998565) %>% 
   # Clean up bike categories
@@ -77,8 +81,9 @@ modeling_data <- speed %>%
   # Exclude any rows with missing DP
   # filter: removed 180 rows (<1%), 54,132 rows remaining
   filter(!is.na(all_speeding_percent) & !is.na(high_speeding_percent)) %>% 
+  # Join variable inputs
   left_join(osm_characteristics %>% 
-              select(seg_id, lanes_osm = lanes, sidewalk_status), 
+              select(seg_id, lanes_osm = lanes, sidewalk_status, parking_osm = parking_lanes), 
             by = "seg_id") %>% 
   left_join(crashes %>% 
               select(seg_id, total_crashes, ksi_rate, crash_speed_involvement_rate),
@@ -87,13 +92,14 @@ modeling_data <- speed %>%
               select(seg_id, 
                      length, width, 
                      lanes_dvrpc, 
-                     parking,
+                     parking_rms = parking,
                      arterial_type_dvrpc,
+                     divided_roadway,
                      road_classification_city,
                      road_classification_fhwa),
             by = "seg_id") %>% 
   left_join(network_supplementary %>% 
-              select(seg_id, count_poles, count_transit, count_calming, count_intersection_ctrl, count_camera),
+              select(seg_id, count_transit, traffic_calming, count_intersection_ctrl),
             by = "seg_id") %>% 
   mutate(year = year(speed_measurement_date)) %>% 
   left_join(network_bike %>% 
@@ -108,11 +114,16 @@ modeling_data <- speed %>%
   mutate(parcel_density = replace_na(parcel_density, 0)) %>% 
   # Coalesce lanes variable 
   mutate(lanes = coalesce(lanes_osm, lanes_dvrpc)) %>% 
-  # Road width per lane variable
-  mutate(width_per_lane = width / lanes) %>% 
-  select(-c(year, lanes_osm, lanes_dvrpc))
+  # Combine parking variable
+  mutate(parking =
+           case_when(!is.na(parking_osm) ~ parking_osm,
+                     parking_rms == "B" ~ "Both sides",
+                     parking_rms %in% c("L", "R") ~ "One side")) %>% 
+  # # Road width per lane variable
+  # mutate(width_per_lane = width / lanes) %>% 
+  select(-c(year, lanes_osm, lanes_dvrpc, parking_rms, parking_osm))
 
-# box_save_rds(modeling_data, file_name = "modeling_data_v4.rds", dir_id = 372762671750)
+# box_save_rds(modeling_data, file_name = "modeling_data_v5.rds", dir_id = 372762671750)
 
 # Create training/test partition --------------------------------------------------------------
 
@@ -156,8 +167,8 @@ recipe_minimal_rf_fhwa <- recipe_0 %>%
 recipe_main_rf_city <- recipe_0 %>% 
   update_role(speed_measurement_hour, 
               lanes,
-              width_per_lane,
               road_classification_city,
+              divided_roadway,
               speed_measurement_road,            # Fixed effect for road name
               speed_measurement_month,
               speed_measurement_day_of_week,
@@ -167,11 +178,9 @@ recipe_main_rf_city <- recipe_0 %>%
               parking,
               bike_lane_type_simple,
               parcel_density,
-              count_poles,
               count_transit,
-              count_calming,
+              traffic_calming,
               count_intersection_ctrl,
-              count_camera,
               length,
               width,
               total_crashes,
@@ -182,8 +191,8 @@ recipe_main_rf_city <- recipe_0 %>%
 recipe_main_rf_fhwa <- recipe_0 %>% 
   update_role(speed_measurement_hour, 
               lanes,
-              width_per_lane,
               road_classification_fhwa,
+              divided_roadway,
               speed_measurement_road,            # Fixed effect for road name
               speed_measurement_month,
               speed_measurement_day_of_week,
@@ -193,11 +202,9 @@ recipe_main_rf_fhwa <- recipe_0 %>%
               parking,
               bike_lane_type_simple,
               parcel_density,
-              count_poles,
               count_transit,
-              count_calming,
+              traffic_calming,
               count_intersection_ctrl,
-              count_camera,
               length,
               width,
               total_crashes,

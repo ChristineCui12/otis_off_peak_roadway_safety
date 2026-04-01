@@ -20,42 +20,32 @@ box_processed_data_folder <- 362958210990
 
 # Read data -----------------------------------------------------------------------------------
 
-# box_ls(362958210990)
-
-# Speed data
-speed <- box_read_rds(2171353657698) %>% 
-  mutate(seg_id = as.character(seg_id)) 
-
-# OSM data
-osm <- box_read_rds(2174904376082) %>% 
-  select(seg_id, lanes_osm = lanes)
-
-# Street network data including DVRPC data
-dvrpc <- box_read_rds(2151757279199) %>% 
-  select(seg_id, stname, divided_roadway = DIV_RDWY, lanes_dvrpc = NEW_LANES) %>% 
-  mutate(divided_roadway = case_when(divided_roadway == 0 ~ "No",
-                                     divided_roadway == 1 ~ "Yes")) %>% 
-  st_drop_geometry()
+# Modeling data
+modeling_data <- box_read_rds(2183528646387)
 
 # Segment geometry
 centerlines <- box_read_rds(2139915462983) %>% 
   mutate(seg_id = as.character(seg_id))
 
-# Overall data --------------------------------------------------------------------------------
-
-lanes_data_all <- centerlines %>% 
-  select(seg_id) %>% 
-  left_join(dvrpc) %>% 
-  left_join(osm) %>% 
-  mutate(lanes_diff = lanes_dvrpc - lanes_osm) %>% 
-  mutate(in_modeling_data = seg_id %in% speed$seg_id)
-
 # Modeling data extract -----------------------------------------------------------------------
 
-lanes_data_modeling <- lanes_data_all %>% 
-  filter(in_modeling_data) %>% 
-  select(-in_modeling_data) %>% 
-  arrange(lanes_dvrpc, lanes_osm) %>% 
+data_input <- modeling_data %>% 
+  mutate(year = year(speed_measurement_date)) %>% 
+  distinct(seg_id, year, lanes, divided_roadway, bike_lane_type_simple, parking, sidewalk_status) %>% 
+  # slice_max: removed 26 rows (6%), 446 rows remaining
+  slice_max(order_by = year, by = seg_id, with_ties = FALSE)
+
+data_mapping <- data_input %>% 
+  left_join(centerlines %>% select(seg_id, stname)) %>% 
+  st_as_sf(crs = "EPSG:4326") %>% 
+  # Get long/lat of first point in geometry so segments can be sorted by position
+  mutate(
+    longitude = sapply(geometry, \(g) st_coordinates(g)[1, "X"]),
+    latitude  = sapply(geometry, \(g) st_coordinates(g)[1, "Y"])
+  ) %>% 
+  mutate(latitude = round(latitude, 2),
+         longitude = round(longitude, 2)) %>% 
+  arrange(desc(latitude), longitude) %>% 
   mutate(row = row_number(), .before = everything()) %>% 
   mutate(task_for =
            case_when(row <= 112 ~ "Christine",
@@ -66,57 +56,43 @@ lanes_data_modeling <- lanes_data_all %>%
   mutate(hypertext =  glue::glue("
   <b>Row number:</b> {row}<br/>
   <b>Street:</b> {stname}<br/>
+  <b>Lanes:</b> {lanes}<br/>
   <b>Divided:</b> {divided_roadway}<br/>
-  <b>DVRPC:</b> {lanes_dvrpc}<br/>
-  <b>OSM:</b> {lanes_osm}
+  <b>Bike lane:</b> {bike_lane_type_simple}<br/>
+  <b>ParkingC:</b> {parking}<br/>
+  <b>Sidewalk:</b> {sidewalk_status}
 "))
 
 # Divide up task ------------------------------------------------------------------------------
 
-mapview(lanes_data_modeling %>% 
-          filter(task_for == "Christine"),
-        label = "hypertext",
-        color = "purple",
-        map.types = "Esri.WorldImagery")
+map <- mapview(data_mapping,
+               label = "hypertext",
+               zcol = "task_for",
+               color = c("red", "green", "magenta", "turquoise2"),
+               map.types = c("Esri.WorldImagery", "CartoDB.Positron"))
 
-mapview(lanes_data_modeling %>% 
-          filter(task_for == "Demi"),
-        label = "hypertext",
-        color = "lightgreen",
-        map.types = "Esri.WorldImagery")
-
-mapview(lanes_data_modeling %>% 
-          filter(task_for == "Kavana"),
-        label = "hypertext",
-        color = "skyblue",
-        map.types = "Esri.WorldImagery")
-
-mapview(lanes_data_modeling %>% 
-          filter(task_for == "Chi-Hyun"),
-        label = "hypertext",
-        color = "yellow",
-        map.types = "Esri.WorldImagery")
+mapshot2(map, "data_check_map.html")
 
 # Write out CSVs for checking -----------------------------------------------------------------
 
 box_output_folder <- 374124673315
 
-lanes_export <- lanes_data_modeling %>% 
+data_export <- data_mapping %>% 
   st_drop_geometry() %>%
-  mutate(lanes_verified = NA) %>%
   mutate(notes = NA) %>% 
-  select(-hypertext)
+  select(-c(year, hypertext, longitude, latitude)) %>% 
+  relocate(stname, .after = seg_id)
 
-christine_data <- lanes_export %>% 
+christine_data <- data_export %>% 
   filter(task_for == "Christine")
 
-demi_data <- lanes_export %>% 
+demi_data <- data_export %>% 
   filter(task_for == "Demi")
 
-kavana_data <- lanes_export %>% 
+kavana_data <- data_export %>% 
   filter(task_for == "Kavana")
 
-chihyun_data <- lanes_export %>% 
+chihyun_data <- data_export %>% 
   filter(task_for == "Chi-Hyun")
 
 # box_write(christine_data,
