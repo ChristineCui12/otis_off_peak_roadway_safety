@@ -80,7 +80,7 @@ box_output_folder <- 374124673315
 data_export <- data_mapping %>% 
   st_drop_geometry() %>%
   mutate(notes = NA) %>% 
-  select(-c(year, hypertext, longitude, latitude)) %>% 
+  select(-c(hypertext, longitude, latitude)) %>% 
   relocate(stname, .after = seg_id)
 
 christine_data <- data_export %>% 
