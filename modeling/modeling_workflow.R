@@ -11,6 +11,7 @@ library(tidymodels)
 library(boxr)
 library(pdp)
 library(DALEXtra)
+library(sf)
 
 # Set up remote data access via Box API
 box_auth()
@@ -41,6 +42,7 @@ crashes <- box_read(2172557691734) %>%
 
 # Street network data
 network_main <- box_read_rds(2151757279199) %>% 
+  as_tibble() %>% 
   mutate(bike_lane = 
            case_when(bike_any == TRUE ~ TRUE,
                      bike_any == FALSE ~ FALSE,
@@ -52,7 +54,15 @@ network_main <- box_read_rds(2151757279199) %>%
          divided_roadway = DIV_RDWY,
          road_classification_city = class1_cs, 
          road_classification_fhwa = fhwa_func_desc) %>% 
+  # Compile and correct widths
   mutate(width = coalesce(width_rms, width_dvrpc)) %>% 
+  mutate(width = case_when(
+    seg_id == "340834" ~ 75,
+    seg_id == "340836" ~ 72,
+    seg_id == "221117" ~ 93,
+    seg_id == "421398" ~ 80,
+    .default = width
+  )) %>% 
   mutate(divided_roadway = case_when(divided_roadway == 1 ~ TRUE,
                                      divided_roadway == 0 ~ FALSE))
 
@@ -74,6 +84,11 @@ network_bike <- box_read_rds(2178022998565) %>%
                      .default = "CHECK"))
 
 network_parcels <- box_read_rds(2178038226815)
+
+# # Centerlines data with geometry, for checks
+# centerlines_geometry <- box_read_rds(2139915462983) %>% 
+#   mutate(seg_id = as.character(seg_id)) %>% 
+#   st_transform(crs = "EPSG:2272")
 
 # Compile modeling dataset --------------------------------------------------------------------
 
@@ -123,7 +138,7 @@ modeling_data <- speed %>%
   # mutate(width_per_lane = width / lanes) %>% 
   select(-c(year, lanes_osm, lanes_dvrpc, parking_rms, parking_osm))
 
-# box_save_rds(modeling_data, file_name = "modeling_data_v5.rds", dir_id = 372762671750)
+# box_save_rds(modeling_data, file_name = "modeling_data_v6.rds", dir_id = 372762671750)
 
 # Create training/test partition --------------------------------------------------------------
 
@@ -226,9 +241,9 @@ recipe_main_rf_fhwa <- recipe_0 %>%
 
 models <-
   workflow_set(preproc = list(minimal_city = recipe_minimal_rf_city, 
-                              minimal_fhwa = recipe_minimal_rf_fhwa, 
-                              main_city = recipe_main_rf_city,
-                              main_fhwa = recipe_main_rf_fhwa),
+                              # minimal_fhwa = recipe_minimal_rf_fhwa, 
+                              main_city = recipe_main_rf_city),
+                              # main_fhwa = recipe_main_rf_fhwa),
                models = list(rf_spec),
                cross = TRUE)
 
@@ -256,23 +271,15 @@ tictoc::toc()
 
 collect_metrics(model_resamples) 
 
-#    wflow_id                 .config              preproc model       .metric .estimator   mean     n  std_err
-#    <chr>                    <chr>                <chr>   <chr>       <chr>   <chr>       <dbl> <int>    <dbl>
-#  1 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.203     10 0.000697
-#  2 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.251     10 0.000859
-#  3 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.223     10 0.00394 
+#   wflow_id                 .config              preproc model       .metric .estimator   mean     n  std_err
+#   <chr>                    <chr>                <chr>   <chr>       <chr>   <chr>       <dbl> <int>    <dbl>
+# 1 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.203     10 0.000697
+# 2 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.251     10 0.000859
+# 3 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.223     10 0.00394 
 
-#  4 minimal_fhwa_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.193     10 0.000695
-#  5 minimal_fhwa_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.243     10 0.000852
-#  6 minimal_fhwa_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.259     10 0.00405 
-
-#  7 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0615    10 0.000222
-#  8 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0947    10 0.000502
-#  9 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.888     10 0.000951
-
-# 10 main_fhwa_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0613    10 0.000219
-# 11 main_fhwa_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0944    10 0.000486
-# 12 main_fhwa_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.889     10 0.000944
+# 4 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0611    10 0.000241
+# 5 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0938    10 0.000533
+# 6 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.890     10 0.00100 
 
 # Fit to training data ------------------------------------------------------------------------
 
@@ -353,17 +360,17 @@ pdp_road_type_by_lanes <-
   model_profile(explainer, 
                 type      = "partial",   
                 variables = "lanes",
-                groups = "road_classification_fhwa",
+                groups = "road_classification_city",
                 N         = NULL)
 
 pdp_road_type_by_lanes_plot <- 
   as_tibble(pdp_road_type_by_lanes$agr_profiles) %>% 
-  # mutate(`_groups_` = 
-  #          fct_relevel(`_groups_`, 
-  #                      "Major Arterial", 
-  #                      "Minor Arterial", 
-  #                      "Collector Residential", 
-  #                      "Local Residential")) %>% 
+  mutate(`_groups_` =
+           fct_relevel(`_groups_`,
+                       "Major Arterial",
+                       "Minor Arterial",
+                       "Collector Residential",
+                       "Local Residential")) %>%
   ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8) +
   scale_y_continuous(limits = c(0, NA), 
@@ -419,25 +426,25 @@ pdp_width_plot
 
 # ggsave(plot = pdp_width_plot, filename = "pdp_width.svg", width = 6, height = 4)
 
-pdp_width_per_lane <- 
-  model_profile(explainer, 
-                type      = "partial",   
-                variables = "width_per_lane",
-                N         = NULL) 
-
-pdp_width_per_lane_plot <- 
-  as_tibble(pdp_width_per_lane$agr_profiles) %>% 
-  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
-  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
-  scale_y_continuous(limits = c(0, NA), 
-                     expand = expansion(mult = c(0, 0.2)),
-                     labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by roadway width per lane",
-       y = "Probability of speeding",
-       x = "Width per lane (ft/lane)")
-
-pdp_width_per_lane_plot
-
+# pdp_width_per_lane <- 
+#   model_profile(explainer, 
+#                 type      = "partial",   
+#                 variables = "width_per_lane",
+#                 N         = NULL) 
+# 
+# pdp_width_per_lane_plot <- 
+#   as_tibble(pdp_width_per_lane$agr_profiles) %>% 
+#   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+#   geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+#   scale_y_continuous(limits = c(0, NA), 
+#                      expand = expansion(mult = c(0, 0.2)),
+#                      labels = label_percent()) +
+#   labs(title = "Predicted probability of speeding by roadway width per lane",
+#        y = "Probability of speeding",
+#        x = "Width per lane (ft/lane)")
+# 
+# pdp_width_per_lane_plot
+#
 # pdp_width_by_lanes <- 
 #   model_profile(explainer, 
 #                 type      = "partial",   
