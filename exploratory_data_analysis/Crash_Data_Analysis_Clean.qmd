@@ -1,0 +1,1005 @@
+---
+title: "Philadelphia Crash Analysis (2020-2024)"
+subtitle: "MUSA Practicum x OTIS"
+author: "Kavana Raju"
+date: "`r Sys.Date()`"
+format:
+  html:
+    code-fold: true
+    code-summary: "Show code"
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+---
+
+## Research Question
+
+Do roads designed for peak capacity contribute to catastrophic crash outcomes during off-peak hours?
+
+**Hypothesis**: Roads designed for peak traffic volumes have excess capacity during off-peak periods, enabling higher speeds and more severe crashes.
+
+---
+
+## Setup
+
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+library(sf)
+library(scales)
+library(boxr)
+library(patchwork)
+
+# Suppress progress bars globally
+options(
+  scipen = 999,
+  boxr.progress = FALSE,
+  readr.show_progress = FALSE,
+  dplyr.show_progress = FALSE
+)
+
+# Authenticate with Box (suppress messages)
+suppressMessages(box_auth())
+
+# Plot themes
+plotTheme <- theme(
+  plot.title = element_text(size = 14, face = "bold"),
+  plot.subtitle = element_text(size = 10),
+  plot.caption = element_text(size = 8, hjust = 0, lineheight = 1.1),
+  axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+  axis.text.y = element_text(size = 10),
+  axis.title = element_text(size = 11, face = "bold"),
+  panel.background = element_blank(),
+  panel.grid.major = element_line(colour = "#D0D0D0", linewidth = 0.2),
+  panel.grid.minor = element_blank(),
+  axis.ticks = element_blank(),
+  legend.position = "right"
+)
+
+mapTheme <- theme(
+  plot.title = element_text(size = 14, face = "bold"),
+  plot.subtitle = element_text(size = 10),
+  plot.caption = element_text(size = 8),
+  axis.line = element_blank(),
+  axis.text = element_blank(),
+  axis.ticks = element_blank(),
+  axis.title = element_blank(),
+  panel.background = element_blank(),
+  panel.border = element_blank(),
+  panel.grid.major = element_line(colour = 'transparent'),
+  panel.grid.minor = element_blank(),
+  legend.position = "right",
+  plot.margin = margin(1, 1, 1, 1, 'cm')
+)
+
+severity_colors <- c(
+  "Fatal" = "#d62728",
+  "Suspected Serious Injury" = "#ff7f0e", 
+  "Suspected Minor Injury" = "#ffbb78",
+  "Possible Injury" = "#c5b0d5",
+  "PDO" = "#c7c7c7"
+)
+
+# Helper function to read spatial data from Box
+read_box_sf <- function(file_id, crs = 2272) {
+  temp_dir <- tempdir()
+  dl_file_path <- box_dl(file_id, local_dir = temp_dir, overwrite = TRUE)
+  sf_data <- st_read(dl_file_path, quiet = TRUE) %>% st_transform(crs)
+  return(sf_data)
+}
+```
+
+---
+
+## Part 1: Load and Harmonize Crash Data
+
+```{r load-data, message=FALSE}
+# 2020 data
+crash_2020_id <- "2129578929490"
+flags_2020_id <- "2129571870046"
+roadway_2020_id <- "2129574335626"
+
+# 2021 data
+crash_2021_id <- "2129584283678"
+flags_2021_id <- "2129572071618"
+roadway_2021_id <- "2129575576179"
+
+# 2022 data
+crash_2022_id <- "2129572753523"
+flags_2022_id <- "2129573139646"
+roadway_2022_id <- "2129573617700"
+
+# 2023 data
+crash_2023_id <- "2129590204560"
+flags_2023_id <- "2129570178906"
+roadway_2023_id <- "2129571655183"
+
+# 2024 data
+crash_2024_id <- "2129573871742"
+flags_2024_id <- "2129575475146"
+roadway_2024_id <- "2129573394142"
+
+# Load all years from Box
+crash_2020 <- box_read_csv(crash_2020_id)
+flags_2020 <- box_read_csv(flags_2020_id)
+roadway_2020 <- box_read_csv(roadway_2020_id)
+
+crash_2021 <- box_read_csv(crash_2021_id)
+flags_2021 <- box_read_csv(flags_2021_id)
+roadway_2021 <- box_read_csv(roadway_2021_id)
+
+crash_2022 <- box_read_csv(crash_2022_id)
+flags_2022 <- box_read_csv(flags_2022_id)
+roadway_2022 <- box_read_csv(roadway_2022_id)
+
+crash_2023 <- box_read_csv(crash_2023_id)
+flags_2023 <- box_read_csv(flags_2023_id)
+roadway_2023 <- box_read_csv(roadway_2023_id)
+
+crash_2024 <- box_read_csv(crash_2024_id)
+flags_2024 <- box_read_csv(flags_2024_id)
+roadway_2024 <- box_read_csv(roadway_2024_id)
+
+# Harmonize data types (WEATHER1 and TCD_FUNC_CD changed across years)
+crash_years <- list(crash_2020, crash_2021, crash_2022, crash_2023, crash_2024)
+crash_years_harmonized <- crash_years %>%
+  map(~ mutate(.x, 
+               WEATHER1 = as.character(WEATHER1),
+               TCD_FUNC_CD = as.character(TCD_FUNC_CD)))
+
+# Combine all years
+all_crashes <- bind_rows(crash_years_harmonized)
+all_flags <- bind_rows(flags_2020, flags_2021, flags_2022, flags_2023, flags_2024)
+all_roadway <- bind_rows(roadway_2020, roadway_2021, roadway_2022, roadway_2023, roadway_2024)
+
+# Filter roadway for primary road (RDWY_SEQ_NUM = 3)
+all_roadway_primary <- all_roadway %>%
+  filter(RDWY_SEQ_NUM == 3) %>%
+  select(CRN, ROUTE, OFFSET, STREET_NAME, SPEED_LIMIT, LANE_COUNT, ROAD_OWNER)
+
+# Join tables
+crash_master <- all_crashes %>%
+  left_join(all_flags, by = "CRN") %>%
+  left_join(all_roadway_primary, by = "CRN")
+
+# Filter to Philadelphia (COUNTY = "67")
+philly_crashes <- crash_master %>%
+  filter(COUNTY == "67")
+
+cat("✓ Loaded and filtered to Philadelphia\n")
+cat("  Total crashes:", format(nrow(philly_crashes), big.mark = ","), "\n")
+cat("  By year:\n")
+print(table(philly_crashes$CRASH_YEAR))
+```
+
+---
+
+## Part 2: Feature Engineering
+
+```{r feature-engineering}
+philly_crashes <- philly_crashes %>%
+  mutate(
+    # Hour of crash (extract from TIME_OF_DAY, fallback to DISPATCH_TM)
+    hour_raw = case_when(
+      !is.na(TIME_OF_DAY) ~ str_sub(as.character(TIME_OF_DAY), 1, 2),
+      !is.na(DISPATCH_TM) ~ str_sub(as.character(DISPATCH_TM), 1, 2),
+      TRUE ~ NA_character_
+    ),
+    HOUR_OF_DAY_CLEAN = as.integer(hour_raw),
+    HOUR_OF_DAY_CLEAN = if_else(HOUR_OF_DAY_CLEAN == 99, NA_integer_, HOUR_OF_DAY_CLEAN),
+    
+    # KSI flag (Killed or Suspected Serious Injury)
+    is_ksi = if_else(FATAL_OR_SUSP_SERIOUS_INJ == "1", 1, 0, missing = 0),
+    
+    # Time periods (peak: 7-10 AM, 4-7 PM)
+    time_period = case_when(
+      is.na(HOUR_OF_DAY_CLEAN) ~ "Unknown",
+      HOUR_OF_DAY_CLEAN >= 7 & HOUR_OF_DAY_CLEAN < 10 ~ "AM Peak (7-10)",
+      HOUR_OF_DAY_CLEAN >= 16 & HOUR_OF_DAY_CLEAN < 19 ~ "PM Peak (16-19)",
+      HOUR_OF_DAY_CLEAN >= 10 & HOUR_OF_DAY_CLEAN < 16 ~ "Midday (10-16)",
+      HOUR_OF_DAY_CLEAN >= 19 & HOUR_OF_DAY_CLEAN < 22 ~ "Evening (19-22)",
+      HOUR_OF_DAY_CLEAN >= 22 | HOUR_OF_DAY_CLEAN < 7 ~ "Night/Late (22-7)",
+      TRUE ~ "Other"
+    ),
+    
+    is_peak = if_else(
+      time_period %in% c("AM Peak (7-10)", "PM Peak (16-19)"), 
+      1, 0, missing = 0
+    ),
+    
+    # Day of week
+    day_name = case_when(
+      DAY_OF_WEEK == 1 ~ "Sunday",
+      DAY_OF_WEEK == 2 ~ "Monday",
+      DAY_OF_WEEK == 3 ~ "Tuesday",
+      DAY_OF_WEEK == 4 ~ "Wednesday",
+      DAY_OF_WEEK == 5 ~ "Thursday",
+      DAY_OF_WEEK == 6 ~ "Friday",
+      DAY_OF_WEEK == 7 ~ "Saturday",
+      TRUE ~ NA_character_
+    ),
+    is_weekend = if_else(DAY_OF_WEEK %in% c(1, 7), 1, 0, missing = 0),
+    
+    # Severity labels
+    severity_label = case_when(
+      MAX_SEVERITY_LEVEL == "1" ~ "Fatal",
+      MAX_SEVERITY_LEVEL == "2" ~ "Suspected Serious Injury",
+      MAX_SEVERITY_LEVEL == "3" ~ "Suspected Minor Injury",
+      MAX_SEVERITY_LEVEL == "4" ~ "Possible Injury",
+      MAX_SEVERITY_LEVEL == "0" ~ "PDO",
+      TRUE ~ "Unknown"
+    ),
+    
+    # Convert flags to integer
+    PEDESTRIAN = as.integer(PEDESTRIAN),
+    BICYCLE = as.integer(BICYCLE),
+    VULNERABLE_ROAD_USER = as.integer(VULNERABLE_ROAD_USER),
+    SPEEDING_RELATED = as.integer(SPEEDING_RELATED),
+    ILLUMINATION_DARK = as.integer(ILLUMINATION_DARK),
+    
+    # Road design variables
+    speed_limit = as.integer(SPEED_LIMIT),
+    lane_count = case_when(
+      LANE_COUNT == "99" ~ NA_integer_,
+      TRUE ~ as.integer(LANE_COUNT)
+    ),
+    
+    # Coordinate validity
+    has_valid_coords = !is.na(DEC_LATITUDE) & !is.na(DEC_LONGITUDE),
+    
+    # Clean street name for matching
+    crash_street_clean = str_to_upper(str_trim(STREET_NAME))
+  ) %>%
+  
+  # Set factor levels
+  mutate(
+    time_period = factor(
+      time_period,
+      levels = c("AM Peak (7-10)", "Midday (10-16)", "PM Peak (16-19)",
+                 "Evening (19-22)", "Night/Late (22-7)", "Unknown")
+    ),
+    
+    severity_label = factor(
+      severity_label,
+      levels = c("Fatal", "Suspected Serious Injury", "Suspected Minor Injury",
+                 "Possible Injury", "PDO", "Unknown")
+    )
+  )
+
+cat("✓ Feature engineering complete\n")
+```
+
+### Summary Statistics
+
+```{r summary-stats}
+cat("Dataset Summary:\n")
+cat("  Total crashes:", format(nrow(philly_crashes), big.mark = ","), "\n")
+cat("  KSI crashes:", format(sum(philly_crashes$is_ksi), big.mark = ","), 
+    "(", round(mean(philly_crashes$is_ksi) * 100, 1), "%)\n")
+cat("  Crashes with time data:", format(sum(!is.na(philly_crashes$HOUR_OF_DAY_CLEAN)), big.mark = ","),
+    "(", round(mean(!is.na(philly_crashes$HOUR_OF_DAY_CLEAN)) * 100, 1), "%)\n")
+cat("  Crashes with coordinates:", format(sum(philly_crashes$has_valid_coords), big.mark = ","),
+    "(", round(mean(philly_crashes$has_valid_coords) * 100, 1), "%)\n")
+cat("  Crashes with speed limit:", format(sum(!is.na(philly_crashes$speed_limit)), big.mark = ","),
+    "(", round(mean(!is.na(philly_crashes$speed_limit)) * 100, 1), "%)\n")
+cat("  Crashes with lane count:", format(sum(!is.na(philly_crashes$lane_count)), big.mark = ","),
+    "(", round(mean(!is.na(philly_crashes$lane_count)) * 100, 1), "%)\n")
+```
+---
+
+## Data Quality Assessment
+
+### Missing Data Analysis
+```{r missing-data-analysis}
+
+missing_summary <- data.frame(
+  Variable = c("HOUR_OF_DAY_CLEAN", "speed_limit", "lane_count", 
+               "DEC_LATITUDE", "DEC_LONGITUDE", "PEDESTRIAN", 
+               "BICYCLE", "SPEEDING_RELATED", "ALCOHOL_RELATED"),
+  Missing_Count = c(
+    sum(is.na(philly_crashes$HOUR_OF_DAY_CLEAN)),
+    sum(is.na(philly_crashes$speed_limit)),
+    sum(is.na(philly_crashes$lane_count)),
+    sum(is.na(philly_crashes$DEC_LATITUDE)),
+    sum(is.na(philly_crashes$DEC_LONGITUDE)),
+    sum(is.na(philly_crashes$PEDESTRIAN)),
+    sum(is.na(philly_crashes$BICYCLE)),
+    sum(is.na(philly_crashes$SPEEDING_RELATED)),
+    sum(is.na(philly_crashes$ALCOHOL_RELATED))
+  )
+)
+
+missing_summary$Missing_Percent <- round(missing_summary$Missing_Count / nrow(philly_crashes) * 100, 1)
+
+knitr::kable(missing_summary, 
+             col.names = c("Variable", "Missing Count", "Missing %"),
+             caption = "Missing Data Summary")
+```
+
+### Feature Distributions
+```{r feature-distributions, fig.width=12, fig.height=8}
+# Speed limit distribution
+p1 <- ggplot(philly_crashes %>% filter(!is.na(speed_limit)), 
+             aes(x = as.factor(speed_limit))) +
+  geom_bar(fill = "#156082") +
+  labs(title = "Crashes by Posted Speed Limit",
+       x = "Speed Limit (mph)", y = "Count") +
+  plotTheme +
+  theme(axis.text.x = element_text(angle = 0))
+
+# Lane count distribution
+p2 <- ggplot(philly_crashes %>% filter(!is.na(lane_count)), 
+             aes(x = as.factor(lane_count))) +
+  geom_bar(fill = "#ff9500") +
+  labs(title = "Crashes by Lane Count",
+       x = "Number of Lanes", y = "Count") +
+  plotTheme +
+  theme(axis.text.x = element_text(angle = 0))
+
+# Hour distribution
+p3 <- ggplot(philly_crashes %>% filter(!is.na(HOUR_OF_DAY_CLEAN)), 
+             aes(x = HOUR_OF_DAY_CLEAN)) +
+  geom_bar(fill = "#028090") +
+  scale_x_continuous(breaks = seq(0, 23, 3)) +
+  labs(title = "Crashes by Hour of Day",
+       x = "Hour (0-23)", y = "Count") +
+  plotTheme +
+  theme(axis.text.x = element_text(angle = 0))
+
+# Day of week distribution
+p4 <- ggplot(philly_crashes %>% filter(!is.na(day_name)), 
+             aes(x = factor(day_name, levels = c("Sunday", "Monday", "Tuesday", 
+                                 "Wednesday", "Thursday", "Friday", "Saturday")))) +
+  geom_bar(fill = "#d62728") +
+  labs(title = "Crashes by Day of Week",
+       x = NULL, y = "Count") +
+  plotTheme +
+  theme(axis.text.x = element_text(angle = 45))
+
+(p1 + p2) / (p3 + p4)
+```
+---
+
+## Part 3: Road Network Linkage
+
+**Two-Tier Approach**: (1) Street name matching (high confidence), (2) Spatial snap within 100 feet (fallback)
+
+```{r road-linkage, message=FALSE, warning=FALSE}
+# Load Street Centerline shapefile
+street_centerline_id <- "2137970615238"
+
+street_roads <- read_box_sf(street_centerline_id, crs = 2272) %>%
+  select(seg_id, st_name, st_type, class, responsibl, geometry) %>%
+  mutate(
+    full_street_name = str_trim(paste(st_name, st_type)),
+    full_street_name_clean = str_to_upper(full_street_name)
+  )
+
+street_lookup <- street_roads %>% 
+  st_drop_geometry() %>%
+  distinct(full_street_name_clean, seg_id, st_name, st_type)
+
+# Tier 1: Street name matching
+# Strategy: For each crash, keep only the FIRST matching segment to avoid memory explosion
+crashes_street_matched <- philly_crashes %>%
+  filter(!is.na(crash_street_clean)) %>%
+  inner_join(
+    street_lookup %>% 
+      group_by(full_street_name_clean) %>% 
+      slice(1) %>%  # Keep only first segment per street name
+      ungroup(),
+    by = c("crash_street_clean" = "full_street_name_clean")
+  ) %>%
+  mutate(road_source = "Street_Name", match_confidence = "High")
+
+# Verify no duplicates
+cat("Tier 1 deduplication check:", sum(duplicated(crashes_street_matched$CRN)), "duplicates remaining\n")
+
+# Tier 2: Spatial snap (for unmatched crashes with coordinates)
+crashes_needing_snap <- philly_crashes %>%
+  filter(!(CRN %in% crashes_street_matched$CRN), has_valid_coords) %>%
+  st_as_sf(coords = c("DEC_LONGITUDE", "DEC_LATITUDE"), crs = 4326) %>%
+  st_transform(crs = 2272)
+
+crashes_snapped <- crashes_needing_snap %>%
+  mutate(
+    nearest_road_id = st_nearest_feature(geometry, street_roads),
+    snap_distance = as.numeric(st_distance(geometry, street_roads[nearest_road_id,], by_element = TRUE))
+  ) %>%
+  filter(snap_distance <= 100) %>%
+  mutate(
+    road_source = "Spatial_Snap",
+    match_confidence = case_when(
+      snap_distance <= 50 ~ "High",
+      snap_distance <= 75 ~ "Medium",
+      TRUE ~ "Low"
+    )
+  )
+
+# Combine and add to philly_crashes
+tier1_df <- crashes_street_matched %>%
+  select(CRN, seg_id, road_source, match_confidence)
+
+tier2_df <- crashes_snapped %>%
+  mutate(seg_id = street_roads$seg_id[nearest_road_id]) %>%
+  st_drop_geometry() %>%
+  select(CRN, seg_id, road_source, match_confidence, snap_distance)
+
+# Combine tier1 and tier2 - ensure no duplicates
+combined_linkage <- bind_rows(tier1_df, tier2_df) %>%
+  distinct(CRN, .keep_all = TRUE)
+
+cat("\nFinal deduplication check:", sum(duplicated(combined_linkage$CRN)), "duplicates\n")
+
+philly_crashes <- philly_crashes %>%
+  left_join(combined_linkage, by = "CRN", relationship = "one-to-one") %>%
+  mutate(has_road_link = !is.na(road_source))
+
+cat("Road Linkage Summary:\n")
+cat("  Tier 1 (street name):", format(nrow(tier1_df), big.mark = ","), "\n")
+cat("  Tier 2 (spatial snap):", format(nrow(tier2_df), big.mark = ","), "\n")
+cat("  Total linked:", format(sum(philly_crashes$has_road_link), big.mark = ","),
+    "(", round(mean(philly_crashes$has_road_link) * 100, 1), "%)\n")
+```
+
+---
+
+## Part 4: Temporal Patterns
+
+```{r hourly-patterns, fig.width=10, fig.height=6}
+crashes_timed <- philly_crashes %>%
+  filter(!is.na(HOUR_OF_DAY_CLEAN))
+
+hourly_summary <- crashes_timed %>%
+  group_by(HOUR_OF_DAY_CLEAN) %>%
+  summarise(
+    total_crashes = n(),
+    ksi_crashes = sum(is_ksi),
+    ksi_rate = ksi_crashes / total_crashes * 100,
+    .groups = "drop"
+  )
+
+ggplot(hourly_summary, aes(x = HOUR_OF_DAY_CLEAN)) +
+  geom_col(aes(y = total_crashes), fill = "#156082", alpha = 0.7) +
+  geom_line(aes(y = ksi_rate * 50), color = "#d62728", linewidth = 1.2) +
+  geom_point(aes(y = ksi_rate * 50), color = "#d62728", size = 3) +
+  scale_y_continuous(
+    name = "Total Crashes",
+    sec.axis = sec_axis(~./50, name = "KSI Rate (%)")
+  ) +
+  scale_x_continuous(breaks = 0:23) +
+  labs(
+    title = "Hourly Crash Patterns in Philadelphia (2020-2024)",
+    subtitle = "Total crashes (bars) and KSI rate (line)",
+    x = "Hour of Day",
+    caption = "Peak hours: 7-10 AM, 4-7 PM | KSI = Killed or Suspected Serious Injury"
+  ) +
+  plotTheme +
+  theme(axis.text.x = element_text(angle = 0))
+```
+
+---
+
+## Part 5: Peak vs Off-Peak Analysis
+
+```{r peak-offpeak-analysis}
+peak_comparison <- philly_crashes %>%
+  filter(!is.na(HOUR_OF_DAY_CLEAN)) %>%
+  mutate(period_type = if_else(is_peak == 1, "Peak Hours", "Off-Peak Hours")) %>%
+  group_by(period_type) %>%
+  summarise(
+    total_crashes = n(),
+    ksi_crashes = sum(is_ksi),
+    ksi_rate = ksi_crashes / total_crashes * 100,
+    speeding_crashes = sum(SPEEDING_RELATED, na.rm = TRUE),
+    speeding_rate = speeding_crashes / total_crashes * 100,
+    ped_crashes = sum(PEDESTRIAN, na.rm = TRUE),
+    ped_rate = ped_crashes / total_crashes * 100,
+    .groups = "drop"
+  )
+
+knitr::kable(peak_comparison, digits = 1, caption = "Peak vs Off-Peak Crash Characteristics")
+
+# Statistical test (chi-squared)
+ksi_test <- prop.test(
+  x = c(sum(philly_crashes$is_ksi[philly_crashes$is_peak == 0], na.rm = TRUE),
+        sum(philly_crashes$is_ksi[philly_crashes$is_peak == 1], na.rm = TRUE)),
+  n = c(sum(philly_crashes$is_peak == 0, na.rm = TRUE),
+        sum(philly_crashes$is_peak == 1, na.rm = TRUE))
+)
+
+cat("\nChi-squared test for KSI rate difference:\n")
+cat("  p-value:", format.pval(ksi_test$p.value), "\n")
+cat("  Statistically significant:", if_else(ksi_test$p.value < 0.05, "Yes", "No"), "\n")
+```
+
+### Visualization
+
+```{r peak-viz, fig.width=8, fig.height=5}
+ggplot(peak_comparison, aes(x = period_type, y = ksi_rate, fill = period_type)) +
+  geom_col() +
+  geom_text(aes(label = paste0(round(ksi_rate, 1), "%")), vjust = -0.5, size = 5) +
+  scale_fill_manual(values = c("Peak Hours" = "#156082", "Off-Peak Hours" = "#ff9500")) +
+  labs(
+    title = "KSI Rate: Peak vs Off-Peak Hours",
+    y = "KSI Rate (%)",
+    x = NULL
+  ) +
+  plotTheme +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 0))
+```
+
+---
+
+## Part 6: Speed Limit Interaction
+
+```{r speed-interaction}
+speed_peak_summary <- philly_crashes %>%
+  filter(!is.na(speed_limit), !is.na(HOUR_OF_DAY_CLEAN)) %>%
+  mutate(period_type = if_else(is_peak == 1, "Peak", "Off-Peak")) %>%
+  group_by(speed_limit, period_type) %>%
+  summarise(
+    total_crashes = n(),
+    ksi_crashes = sum(is_ksi),
+    ksi_rate = ksi_crashes / total_crashes * 100,
+    .groups = "drop"
+  ) %>%
+  filter(total_crashes >= 20)
+
+ggplot(speed_peak_summary, aes(x = as.factor(speed_limit), y = ksi_rate, fill = period_type)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("Peak" = "#156082", "Off-Peak" = "#ff9500")) +
+  labs(
+    title = "KSI Rate by Speed Limit and Time Period",
+    subtitle = "Only roads with 20+ crashes shown",
+    x = "Posted Speed Limit (mph)",
+    y = "KSI Rate (%)",
+    fill = "Period"
+  ) +
+  plotTheme
+```
+
+---
+
+## Part 7: Spatial Visualization
+
+```{r prepare-spatial-data}
+# Load Philadelphia boundary from Box
+city_limits_id <- "2187037802115"
+philly_boundary <- read_box_sf(city_limits_id, crs = 2272)
+
+# Create crash points
+crash_points <- philly_crashes %>%
+  filter(has_valid_coords) %>%
+  st_as_sf(coords = c("DEC_LONGITUDE", "DEC_LATITUDE"), crs = 4326) %>%
+  st_transform(crs = 2272)
+```
+
+### Map 1: Crash Points by Severity
+
+```{r map-all-crashes, fig.width=12, fig.height=10}
+ggplot() +
+  geom_sf(data = philly_boundary, fill = "white", color = "gray50") +
+  geom_sf(data = crash_points, aes(color = severity_label), alpha = 0.6, size = 0.5) +
+  scale_color_manual(values = severity_colors, name = "Severity") +
+  labs(
+    title = "All Crash Locations in Philadelphia (2020-2024)",
+    subtitle = paste0(format(nrow(crash_points), big.mark = ","), " crashes with valid coordinates"),
+    caption = "Source: PennDOT Crash Database"
+  ) +
+  mapTheme
+```
+
+### Map 2: KSI Crashes Only
+
+```{r spatial-maps, fig.width=12, fig.height=10}
+ksi_points <- crash_points %>% filter(is_ksi == 1)
+
+ggplot() +
+  geom_sf(data = philly_boundary, fill = "white", color = "gray50") +
+  geom_sf(data = ksi_points, aes(color = severity_label), alpha = 0.6, size = 0.5) +
+  scale_color_manual(values = severity_colors, name = "Severity") +
+  labs(
+    title = "KSI Crashes in Philadelphia (2020-2024)",
+    subtitle = paste0(format(nrow(ksi_points), big.mark = ","), " crashes"),
+    caption = "Source: PennDOT Crash Database"
+  ) +
+  mapTheme
+```
+
+---
+
+## Part 8: Segment-Level Analysis and Export
+
+```{r segment-aggregation}
+# Just filter for high-confidence matches
+crashes_for_segments <- philly_crashes %>%
+  filter(match_confidence == "High", !is.na(seg_id))
+
+# Comprehensive segment aggregation
+segment_attributes_full <- crashes_for_segments %>%
+  group_by(seg_id) %>%
+  summarise(
+    # Total counts
+    total_crashes = n(),
+    crashes_2020 = sum(CRASH_YEAR == 2020, na.rm = TRUE),
+    crashes_2021 = sum(CRASH_YEAR == 2021, na.rm = TRUE),
+    crashes_2022 = sum(CRASH_YEAR == 2022, na.rm = TRUE),
+    crashes_2023 = sum(CRASH_YEAR == 2023, na.rm = TRUE),
+    crashes_2024 = sum(CRASH_YEAR == 2024, na.rm = TRUE),
+    
+    # Severity
+    ksi_crashes = sum(is_ksi == 1, na.rm = TRUE),
+    fatal_crashes = sum(MAX_SEVERITY_LEVEL == "1", na.rm = TRUE),
+    serious_inj = sum(MAX_SEVERITY_LEVEL == "2", na.rm = TRUE),
+    minor_inj = sum(MAX_SEVERITY_LEVEL == "3", na.rm = TRUE),
+    poss_inj = sum(MAX_SEVERITY_LEVEL == "4", na.rm = TRUE),
+    pdo_crashes = sum(MAX_SEVERITY_LEVEL == "0", na.rm = TRUE),
+    
+    # VRU
+    ped_crashes = sum(PEDESTRIAN == 1, na.rm = TRUE),
+    bike_crashes = sum(BICYCLE == 1, na.rm = TRUE),
+    vru_crashes = sum(VULNERABLE_ROAD_USER == 1, na.rm = TRUE),
+    
+    # Characteristics
+    speeding = sum(SPEEDING_RELATED == 1, na.rm = TRUE),
+    alcohol = sum(ALCOHOL_RELATED == 1, na.rm = TRUE),
+    dark = sum(ILLUMINATION_DARK == 1, na.rm = TRUE),
+    
+    # Temporal
+    peak_crash = sum(is_peak == 1, na.rm = TRUE),
+    offpk_crash = sum(is_peak == 0 & !is.na(is_peak), na.rm = TRUE),
+    am_peak = sum(time_period == "AM Peak (7-10)", na.rm = TRUE),
+    pm_peak = sum(time_period == "PM Peak (16-19)", na.rm = TRUE),
+    midday = sum(time_period == "Midday (10-16)", na.rm = TRUE),
+    evening = sum(time_period == "Evening (19-22)", na.rm = TRUE),
+    night = sum(time_period == "Night/Late (22-7)", na.rm = TRUE),
+    weekend = sum(is_weekend == 1, na.rm = TRUE),
+    weekday = sum(is_weekend == 0, na.rm = TRUE),
+    
+    # Road design
+    spd_lim_md = as.numeric(names(sort(table(speed_limit), decreasing = TRUE))[1]),
+    lane_ct_md = median(lane_count, na.rm = TRUE),
+    
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Rates
+    ksi_rate = if_else(total_crashes > 0, ksi_crashes / total_crashes * 100, 0),
+    fatal_rate = if_else(total_crashes > 0, fatal_crashes / total_crashes * 100, 0),
+    ped_rate = if_else(total_crashes > 0, ped_crashes / total_crashes * 100, 0),
+    bike_rate = if_else(total_crashes > 0, bike_crashes / total_crashes * 100, 0),
+    vru_rate = if_else(total_crashes > 0, vru_crashes / total_crashes * 100, 0),
+    spd_rate = if_else(total_crashes > 0, speeding / total_crashes * 100, 0),
+    alc_rate = if_else(total_crashes > 0, alcohol / total_crashes * 100, 0),
+    dark_rate = if_else(total_crashes > 0, dark / total_crashes * 100, 0),
+    
+    # Temporal shares
+    offpk_share = if_else(
+      (peak_crash + offpk_crash) > 0,
+      offpk_crash / (peak_crash + offpk_crash) * 100,
+      NA_real_
+    ),
+    wknd_share = if_else(total_crashes > 0, weekend / total_crashes * 100, 0),
+    
+    # Density
+    crash_py = total_crashes / 5,
+    ksi_py = ksi_crashes / 5
+  )
+
+cat("✓ Segment aggregation complete\n")
+cat("  Segments with crashes:", format(nrow(segment_attributes_full), big.mark = ","), "\n")
+```
+
+### Segment-Level Statistics
+
+```{r segment-statistics}
+cat("\nSegment-level summary:\n")
+cat("Total segments with crashes:", format(nrow(segment_attributes_full), big.mark = ","), "\n")
+cat("Segments with 1+ crashes:", sum(segment_attributes_full$total_crashes > 0), "\n")
+cat("Segments with 5+ crashes:", sum(segment_attributes_full$total_crashes >= 5), "\n")
+cat("Segments with 10+ crashes:", sum(segment_attributes_full$total_crashes >= 10), "\n")
+
+# Top 10 segments by crash count
+cat("\nTop 10 segments by total crashes:\n")
+segment_attributes_full %>%
+  arrange(desc(total_crashes)) %>%
+  head(10) %>%
+  select(seg_id, total_crashes, ksi_crashes, ksi_rate) %>%
+  knitr::kable(digits = 1)
+```
+
+### Join Crash Statistics to Road Geometry
+
+```{r join-segment-stats-to-roads}
+# Join crash statistics to road geometry
+roads_with_crashes <- street_roads %>%
+  left_join(segment_attributes_full, by = "seg_id") %>%
+  mutate(
+    # Replace NA with 0 for segments with no crashes
+    total_crashes = replace_na(total_crashes, 0),
+    ksi_crashes = replace_na(ksi_crashes, 0),
+    ksi_rate = replace_na(ksi_rate, 0),
+    ped_crashes = replace_na(ped_crashes, 0),
+    bike_crashes = replace_na(bike_crashes, 0),
+    speeding = replace_na(speeding, 0),
+    peak_crash = replace_na(peak_crash, 0),
+    offpk_crash = replace_na(offpk_crash, 0)
+  )
+
+cat("Road segments with crash data joined:", 
+    format(nrow(roads_with_crashes), big.mark = ","), "\n")
+```
+
+### Map 3: Roads Colored by Crash Count
+
+```{r map-roads-by-crash-count, fig.width=12, fig.height=10}
+# Filter to segments with at least 1 crash for visualization
+roads_with_crashes_filtered <- roads_with_crashes %>%
+  filter(total_crashes > 0)
+
+ggplot() +
+  geom_sf(data = street_roads, color = "gray90", linewidth = 0.2) +
+  geom_sf(data = roads_with_crashes_filtered, 
+          aes(color = total_crashes, linewidth = total_crashes)) +
+  scale_color_viridis_c(
+    name = "Total Crashes\n(2020-2024)",
+    option = "plasma",
+    trans = "log10",
+    breaks = c(1, 5, 10, 25, 50, 100)
+  ) +
+  scale_linewidth_continuous(
+    name = "Total Crashes\n(2020-2024)",
+    range = c(0.3, 2),
+    trans = "log10",
+    breaks = c(1, 5, 10, 25, 50, 100),
+    guide = "none"
+  ) +
+  labs(
+    title = "Philadelphia Road Segments by Crash Frequency (2020-2024)",
+    subtitle = "Darker/thicker lines = more crashes",
+    caption = "Source: PennDOT Crash Database | Only segments with 1+ crashes shown"
+  ) +
+  mapTheme +
+  theme(legend.position = "right")
+```
+
+### Map 4: High Injury Network (Roads by KSI Count)
+
+```{r map-roads-by-ksi-count, fig.width=12, fig.height=10}
+# Filter to segments with at least 1 KSI crash
+roads_with_ksi <- roads_with_crashes %>%
+  filter(ksi_crashes > 0)
+
+ggplot() +
+  geom_sf(data = street_roads, color = "gray90", linewidth = 0.2) +
+  geom_sf(data = roads_with_ksi, 
+          aes(color = ksi_crashes, linewidth = ksi_crashes)) +
+  scale_color_gradient(
+    name = "KSI Crashes\n(2020-2024)",
+    low = "#ff9500",
+    high = "#d62728",
+    trans = "log10",
+    breaks = c(1, 2, 5, 10, 20)
+  ) +
+  scale_linewidth_continuous(
+    name = "KSI Crashes\n(2020-2024)",
+    range = c(0.5, 3),
+    trans = "log10",
+    breaks = c(1, 2, 5, 10, 20),
+    guide = "none"
+  ) +
+  labs(
+    title = "Philadelphia High Injury Network (2020-2024)",
+    subtitle = "Road segments by KSI crash frequency",
+    caption = "Source: PennDOT Crash Database | Only segments with 1+ KSI crashes shown"
+  ) +
+  mapTheme +
+  theme(legend.position = "right")
+```
+
+### Map 5: Peak vs Off-Peak Crash Distribution by Segment
+
+```{r map-peak-offpeak-ratio, fig.width=12, fig.height=10}
+# Calculate peak/off-peak ratio for segments with 5+ crashes
+roads_peak_offpeak <- roads_with_crashes %>%
+  filter(total_crashes >= 5) %>%
+  mutate(
+    offpeak_ratio = offpk_crash / (peak_crash + offpk_crash),
+    dominant_period = case_when(
+      offpeak_ratio > 0.6 ~ "Off-Peak Dominant",
+      offpeak_ratio < 0.4 ~ "Peak Dominant",
+      TRUE ~ "Balanced"
+    )
+  )
+
+ggplot() +
+  geom_sf(data = street_roads, color = "gray90", linewidth = 0.2) +
+  geom_sf(data = roads_peak_offpeak, 
+          aes(color = offpeak_ratio), 
+          linewidth = 1) +
+  scale_color_gradient2(
+    name = "Off-Peak\nCrash Share",
+    low = "#156082",      # Blue = peak dominant
+    mid = "gray70",       # Gray = balanced
+    high = "#ff9500",     # Orange = off-peak dominant
+    midpoint = 0.5,
+    labels = percent
+  ) +
+  labs(
+    title = "Peak vs Off-Peak Crash Distribution by Road Segment",
+    subtitle = "Only segments with 5+ crashes shown",
+    caption = "Blue = More peak crashes | Orange = More off-peak crashes"
+  ) +
+  mapTheme +
+  theme(legend.position = "right")
+```
+
+### Identify High-Risk Segments
+
+```{r high-risk-segments}
+# Define high-risk segments (top 10% by crash count OR 3+ KSI crashes)
+crash_threshold <- quantile(segment_attributes_full$total_crashes, 0.90, na.rm = TRUE)
+
+high_risk_segments <- segment_attributes_full %>%
+  filter(
+    total_crashes >= crash_threshold | ksi_crashes >= 3
+  ) %>%
+  arrange(desc(ksi_crashes), desc(total_crashes))
+
+cat("High-risk segments identified:", nrow(high_risk_segments), "\n\n")
+cat("Top 20 highest-risk segments:\n")
+high_risk_segments %>%
+  head(20) %>%
+  select(seg_id, total_crashes, ksi_crashes, ksi_rate, 
+         ped_crashes, bike_crashes, speeding) %>%
+  knitr::kable(digits = 1)
+```
+
+### Join to Street Centerlines and Export
+
+```{r export-final, message=FALSE, warning=FALSE}
+### Join to Street Centerlines and Export
+
+street_centerlines_final <- street_roads %>%
+  left_join(segment_attributes_full, by = "seg_id") %>%
+  mutate(across(where(is.numeric), ~replace_na(.x, 0)))
+
+# Create output directory
+if (!dir.exists("output")) {
+  dir.create("output")
+}
+
+# Export shapefile
+st_write(
+  street_centerlines_final, 
+  "output/street_centerlines_with_crashes.shp",
+  delete_dsn = TRUE, quiet = TRUE
+)
+
+# Export GeoJSON
+st_write(
+  street_centerlines_final,
+  "output/street_centerlines_with_crashes.geojson",
+  delete_dsn = TRUE, quiet = TRUE
+)
+
+# Export CSV
+street_centerlines_final %>%
+  st_drop_geometry() %>%
+  write_csv("output/street_segment_crash_attributes.csv")
+
+# Export high-crash segments
+high_crash_segments <- street_centerlines_final %>%
+  filter(total_crashes >= 5)
+
+st_write(
+  high_crash_segments,
+  "output/high_crash_segments.shp",
+  delete_dsn = TRUE, quiet = TRUE
+)
+
+cat("✓ Export complete\n")
+cat("  Files created:\n")
+cat("    - output/street_centerlines_with_crashes.shp\n")
+cat("    - output/street_centerlines_with_crashes.geojson\n")
+cat("    - output/street_segment_crash_attributes.csv\n")
+cat("    - output/high_crash_segments.shp\n")
+```
+
+### Final Summary
+
+```{r final-summary}
+summary_stats <- street_centerlines_final %>%
+  st_drop_geometry() %>%
+  summarise(
+    total_segments = n(),
+    segments_with_crashes = sum(total_crashes > 0),
+    segments_5plus = sum(total_crashes >= 5),
+    segments_10plus = sum(total_crashes >= 10),
+    total_crashes = sum(total_crashes),
+    total_ksi = sum(ksi_crashes),
+    avg_crashes = round(mean(total_crashes), 2),
+    median_crashes = median(total_crashes),
+    max_crashes = max(total_crashes)
+  )
+
+knitr::kable(summary_stats, caption = "Final Dataset Summary")
+
+cat("\nTop 20 highest-crash segments:\n")
+street_centerlines_final %>%
+  st_drop_geometry() %>%
+  arrange(desc(total_crashes)) %>%
+  select(seg_id, full_street_name, total_crashes, ksi_crashes, ksi_rate,
+         ped_crashes, bike_crashes, peak_crash, offpk_crash) %>%
+  head(20) %>%
+  knitr::kable(digits = 1)
+
+cat("\n✓ Processing complete - ready for modeling\n")
+```
+
+### Model-Ready Dataset Documentation
+```{r model-documentation}
+cat("\n=== MODEL-READY DATASET DOCUMENTATION ===\n\n")
+
+cat("Dataset: street_centerlines_with_crashes.shp\n")
+cat("Unit of Analysis: Road segment (seg_id)\n")
+cat("Temporal Coverage: 2020-2024 (5 years)\n")
+cat("Spatial Coverage: Philadelphia County\n\n")
+
+cat("RECOMMENDED FILTERING FOR MODELING:\n")
+cat("  Include only segments with total_crashes >= 5\n")
+cat("  This provides stable rate estimates\n")
+cat("  Segments meeting criteria:", sum(street_centerlines_final$total_crashes >= 5), "\n\n")
+
+cat("TARGET VARIABLES (examples):\n")
+cat("  - ksi_rate: % of crashes that are KSI (continuous, 0-100)\n")
+cat("  - offpk_share: % of crashes during off-peak (continuous, 0-100)\n")
+cat("  - total_crashes: Crash count (Poisson/Negative Binomial)\n")
+cat("  - ksi_crashes: KSI count (Poisson/Negative Binomial)\n\n")
+
+cat("PREDICTOR VARIABLES:\n")
+cat("  Road Design: spd_lim_md, lane_ct_md, class, responsibl\n")
+cat("  Crash Patterns: ped_rate, bike_rate, vru_rate, spd_rate, alc_rate, dark_rate\n")
+cat("  Temporal: peak_crash, offpk_crash, wknd_share, am_peak, pm_peak, midday, evening, night\n")
+cat("  Severity: fatal_rate, ksi_rate, serious_inj, minor_inj\n")
+cat("  Counts: total_crashes, crashes_2020-2024, weekend, weekday\n\n")
+
+cat("FEATURE ENGINEERING NOTES:\n")
+cat("  - All rates are percentages (0-100)\n")
+cat("  - Median values used for spd_lim_md and lane_ct_md (mode for speed limit)\n")
+cat("  - crash_py and ksi_py are annualized (total / 5 years)\n")
+cat("  - Segments with no crashes have all values set to 0\n\n")
+```
+
+---
+
+## Validation: Crash Count Verification
+
+```{r validation-check}
+cat("\n=== FINAL VALIDATION CHECK ===\n\n")
+
+cat("Original crash data:\n")
+cat("  Total crashes loaded:", format(nrow(philly_crashes), big.mark = ","), "\n")
+cat("  Crashes with road link:", format(sum(philly_crashes$has_road_link, na.rm = TRUE), big.mark = ","), "\n")
+cat("  High-confidence links:", format(sum(philly_crashes$match_confidence == "High", na.rm = TRUE), big.mark = ","), "\n\n")
+
+cat("Segment aggregations:\n")
+cat("  Total segments with crashes:", format(nrow(segment_attributes_full), big.mark = ","), "\n")
+cat("  Sum of all segment crashes:", format(sum(segment_attributes_full$total_crashes), big.mark = ","), "\n\n")
+
+cat("Expected vs Actual:\n")
+high_conf_crashes <- sum(philly_crashes$match_confidence == "High", na.rm = TRUE)
+segment_total_crashes <- sum(segment_attributes_full$total_crashes)
+
+cat("  High-confidence crashes:", format(high_conf_crashes, big.mark = ","), "\n")
+cat("  Aggregated segment crashes:", format(segment_total_crashes, big.mark = ","), "\n")
+
+if (abs(high_conf_crashes - segment_total_crashes) < 10) {
+  cat("  ✓ VALIDATION PASSED: Counts match!\n")
+} else {
+  diff <- segment_total_crashes - high_conf_crashes
+  cat("  ⚠ WARNING: Mismatch of", format(diff, big.mark = ","), "crashes\n")
+  cat("  This suggests possible duplication or aggregation issues\n")
+}
+```
