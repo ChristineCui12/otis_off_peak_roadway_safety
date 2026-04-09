@@ -550,6 +550,19 @@ speed_data_analysis <- speed_data_long %>%
                      count_hr >= 11 ~ "Off-peak",
                      count_hr >= 7 ~ "Peak",
                      count_hr >= 0 ~ "Off-peak")) %>% 
+  # More detailed period of day
+  mutate(period_of_day = 
+           case_when(count_hr >= 20 ~ "Off-peak (night)",
+                     count_hr >= 16 ~ "Peak (evening)",
+                     count_hr >= 11 ~ "Off-peak (midday)",
+                     count_hr >= 7 ~ "Peak (morning)",
+                     count_hr >= 0 ~ "Off-peak (night)")) %>% 
+  mutate(period_of_day =
+           fct_relevel(period_of_day,
+                       "Off-peak (night)",
+                       "Off-peak (midday)",
+                       "Peak (evening)",
+                       "Peak (morning)")) %>% 
   # Exclude highway-related measurement points
   # filter: removed 16,464 rows (2%), 760,368 rows remaining
   filter(!roadway_type %in% c("High Speed Ramps", "Low Speed Ramps", "Expressways")) %>% 
@@ -562,28 +575,28 @@ speed_data_analysis <- speed_data_long %>%
 
 ```
 
-```{r Construct modeling data outputs}
+```{r Construct modeling data outputs by hour}
 
-speed_summary_all_speeding <- speed_data_analysis %>% 
+speed_summary_all_speeding_by_hour <- speed_data_analysis %>% 
   group_by(recordnum, countdate, count_hr, speeding, volume_total) %>% 
   summarize(all_speeding_count = sum(count)) %>% 
   ungroup() %>% 
   filter(speeding == "Speeding") %>% 
   mutate(all_speeding_percent = all_speeding_count / volume_total)
 
-speed_summary_high_speeding <- speed_data_analysis %>% 
+speed_summary_high_speeding_by_hour <- speed_data_analysis %>% 
   group_by(recordnum, countdate, count_hr, high_speeding, volume_total) %>% 
   summarize(high_speeding_count = sum(count)) %>% 
   ungroup() %>% 
   filter(high_speeding == "High speeding") %>% 
   mutate(high_speeding_percent = high_speeding_count / volume_total)
 
-speed_modeling_data <- speed_data_analysis %>%
+speed_modeling_data_by_hour <- speed_data_analysis %>%
   distinct(recordnum, seg_id, countdate, count_hr, road, longitude, latitude, speedlimit, volume_total) %>% 
-  left_join(speed_summary_all_speeding %>% 
+  left_join(speed_summary_all_speeding_by_hour %>% 
               select(recordnum, countdate, count_hr, all_speeding_count, all_speeding_percent),
             by = c("recordnum", "countdate", "count_hr")) %>% 
-  left_join(speed_summary_high_speeding %>% 
+  left_join(speed_summary_high_speeding_by_hour %>% 
               select(recordnum, countdate, count_hr, high_speeding_count, high_speeding_percent),
             by = c("recordnum", "countdate", "count_hr")) %>% 
   mutate(speed_measurement_month = month(countdate)) %>% 
@@ -607,9 +620,63 @@ speed_modeling_data <- speed_data_analysis %>%
 
 ```
 
+```{r Construct modeling data outputs by period}
+
+# Here, disregard the volume from the volume data and instead use speeding data counts 
+# directly to calculate total volume, so calculations can be done naturally.
+
+speed_summary_all_speeding_by_period <- speed_data_analysis %>% 
+  group_by(recordnum, countdate, period_of_day, speeding) %>% 
+  summarize(count = sum(count)) %>% 
+  mutate(volume_total = sum(count)) %>% 
+  ungroup() %>% 
+  mutate(percent = count / volume_total) %>% 
+  filter(speeding == "Speeding") %>% 
+  rename(all_speeding_count = count, all_speeding_percent = percent)
+
+speed_summary_high_speeding_by_period <- speed_data_analysis %>% 
+  group_by(recordnum, countdate, period_of_day, high_speeding) %>% 
+  summarize(count = sum(count)) %>% 
+  mutate(volume_total = sum(count)) %>% 
+  ungroup() %>% 
+  mutate(percent = count / volume_total) %>% 
+  filter(high_speeding == "High speeding") %>% 
+  rename(high_speeding_count = count, high_speeding_percent = percent)
+
+speed_modeling_data_by_period <- speed_data_analysis %>%
+  # distinct: removed 751,316 rows (99%), 9,052 rows remaining
+  distinct(recordnum, seg_id, countdate, period_of_day, road, longitude, latitude, speedlimit) %>% 
+  left_join(speed_summary_all_speeding_by_period %>% 
+              select(recordnum, countdate, period_of_day, all_speeding_count, all_speeding_percent, volume_total),
+            by = c("recordnum", "countdate", "period_of_day")) %>% 
+  left_join(speed_summary_high_speeding_by_period %>% 
+              select(recordnum, countdate, period_of_day, high_speeding_count, high_speeding_percent, volume_total),
+            by = c("recordnum", "countdate", "period_of_day", "volume_total")) %>% 
+  mutate(speed_measurement_month = month(countdate)) %>% 
+  mutate(weekday = wday(countdate, label = TRUE)) %>% 
+  mutate(day_of_week = if_else(weekday %in% c("Sat", "Sun"), "Weekend", "Weekday")) %>% 
+  select(seg_id, 
+         recordnum, 
+         speed_measurement_road = road,
+         speed_measurement_longitude = longitude,
+         speed_measurement_latitude = latitude,
+         speed_measurement_date = countdate,
+         speed_measurement_month,
+         speed_measurement_day_of_week = day_of_week,
+         speed_measurement_period = period_of_day,
+         speed_limit = speedlimit,
+         volume_total,
+         all_speeding_count,
+         all_speeding_percent,
+         high_speeding_count,
+         high_speeding_percent)
+
+```
+
 ```{r Export modeling data, include=FALSE}
 
-# box_save_rds(speed_modeling_data, file_name = "speed_modeling_data_v1.rds", dir_id = box_processed_data_folder)
+# box_save_rds(speed_modeling_data_by_hour, file_name = "speed_modeling_data_by_hour_v1.rds", dir_id = box_processed_data_folder)
+# box_save_rds(speed_modeling_data_by_period, file_name = "speed_modeling_data_by_period_v1.rds", dir_id = box_processed_data_folder)
 
 ```
 
