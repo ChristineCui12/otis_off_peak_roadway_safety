@@ -284,6 +284,7 @@ cat("  Crashes with speed limit:", format(sum(!is.na(philly_crashes$speed_limit)
     "(", round(mean(!is.na(philly_crashes$speed_limit)) * 100, 1), "%)\n")
 cat("  Crashes with lane count:", format(sum(!is.na(philly_crashes$lane_count)), big.mark = ","),
     "(", round(mean(!is.na(philly_crashes$lane_count)) * 100, 1), "%)\n")
+
 ```
 ---
 
@@ -656,6 +657,44 @@ segment_attributes_full <- crashes_for_segments %>%
     night = sum(time_period == "Night/Late (22-7)", na.rm = TRUE),
     weekend = sum(is_weekend == 1, na.rm = TRUE),
     weekday = sum(is_weekend == 0, na.rm = TRUE),
+
+    # Hourly crash counts (0-23)
+    h00 = sum(HOUR_OF_DAY_CLEAN == 0, na.rm = TRUE),
+    h01 = sum(HOUR_OF_DAY_CLEAN == 1, na.rm = TRUE),
+    h02 = sum(HOUR_OF_DAY_CLEAN == 2, na.rm = TRUE),
+    h03 = sum(HOUR_OF_DAY_CLEAN == 3, na.rm = TRUE),
+    h04 = sum(HOUR_OF_DAY_CLEAN == 4, na.rm = TRUE),
+    h05 = sum(HOUR_OF_DAY_CLEAN == 5, na.rm = TRUE),
+    h06 = sum(HOUR_OF_DAY_CLEAN == 6, na.rm = TRUE),
+    h07 = sum(HOUR_OF_DAY_CLEAN == 7, na.rm = TRUE),
+    h08 = sum(HOUR_OF_DAY_CLEAN == 8, na.rm = TRUE),
+    h09 = sum(HOUR_OF_DAY_CLEAN == 9, na.rm = TRUE),
+    h10 = sum(HOUR_OF_DAY_CLEAN == 10, na.rm = TRUE),
+    h11 = sum(HOUR_OF_DAY_CLEAN == 11, na.rm = TRUE),
+    h12 = sum(HOUR_OF_DAY_CLEAN == 12, na.rm = TRUE),
+    h13 = sum(HOUR_OF_DAY_CLEAN == 13, na.rm = TRUE),
+    h14 = sum(HOUR_OF_DAY_CLEAN == 14, na.rm = TRUE),
+    h15 = sum(HOUR_OF_DAY_CLEAN == 15, na.rm = TRUE),
+    h16 = sum(HOUR_OF_DAY_CLEAN == 16, na.rm = TRUE),
+    h17 = sum(HOUR_OF_DAY_CLEAN == 17, na.rm = TRUE),
+    h18 = sum(HOUR_OF_DAY_CLEAN == 18, na.rm = TRUE),
+    h19 = sum(HOUR_OF_DAY_CLEAN == 19, na.rm = TRUE),
+    h20 = sum(HOUR_OF_DAY_CLEAN == 20, na.rm = TRUE),
+    h21 = sum(HOUR_OF_DAY_CLEAN == 21, na.rm = TRUE),
+    h22 = sum(HOUR_OF_DAY_CLEAN == 22, na.rm = TRUE),
+    h23 = sum(HOUR_OF_DAY_CLEAN == 23, na.rm = TRUE),
+    time_unknown = sum(is.na(HOUR_OF_DAY_CLEAN)),
+
+    # KSI by time period
+    ksi_peak = sum(is_ksi == 1 & is_peak == 1, na.rm = TRUE),
+    ksi_offpk = sum(is_ksi == 1 & is_peak == 0, na.rm = TRUE),
+    ksi_am = sum(is_ksi == 1 & time_period == "AM Peak (7-10)", na.rm = TRUE),
+    ksi_pm = sum(is_ksi == 1 & time_period == "PM Peak (16-19)", na.rm = TRUE),
+    ksi_midday = sum(is_ksi == 1 & time_period == "Midday (10-16)", na.rm = TRUE),
+    ksi_eve = sum(is_ksi == 1 & time_period == "Evening (19-22)", na.rm = TRUE),
+    ksi_night = sum(is_ksi == 1 & time_period == "Night/Late (22-7)", na.rm = TRUE),
+    ksi_wknd = sum(is_ksi == 1 & is_weekend == 1, na.rm = TRUE),
+    ksi_wkdy = sum(is_ksi == 1 & is_weekend == 0, na.rm = TRUE),
     
     # Road design
     spd_lim_md = as.numeric(names(sort(table(speed_limit), decreasing = TRUE))[1]),
@@ -681,6 +720,13 @@ segment_attributes_full <- crashes_for_segments %>%
       NA_real_
     ),
     wknd_share = if_else(total_crashes > 0, weekend / total_crashes * 100, 0),
+    night_share = if_else(total_crashes > 0, night / total_crashes * 100, 0),
+
+    # KSI rates by time period
+    ksi_rate_peak = if_else(peak_crash > 0, ksi_peak / peak_crash * 100, NA_real_),
+    ksi_rate_offpk = if_else(offpk_crash > 0, ksi_offpk / offpk_crash * 100, NA_real_),
+    ksi_rate_night = if_else(night > 0, ksi_night / night * 100, NA_real_),
+    ksi_rate_wknd = if_else(weekend > 0, ksi_wknd / weekend * 100, NA_real_),
     
     # Density
     crash_py = total_crashes / 5,
