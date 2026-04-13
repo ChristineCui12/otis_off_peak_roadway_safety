@@ -73,6 +73,12 @@ map <- mapview(data_mapping,
 
 mapshot2(map, "data_check_map.html")
 
+st_write(data_mapping, "data_check_all.kml")
+st_write(data_mapping %>% filter(task_for == "Christine"), "data_check_christine.kml")
+st_write(data_mapping %>% filter(task_for == "Demi"), "data_check_demi.kml")
+st_write(data_mapping %>% filter(task_for == "Kavana"), "data_check_kavana.kml")
+st_write(data_mapping %>% filter(task_for == "Chi-Hyun"), "data_check_chihyun.kml")
+
 # Write out CSVs for checking -----------------------------------------------------------------
 
 box_output_folder <- 374124673315
