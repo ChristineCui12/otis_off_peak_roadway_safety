@@ -35,10 +35,8 @@ speed_raw <- box_read_rds(2133989776667) %>%
   distinct()
 
 # Speed data
-speed <- box_read_rds(2171353657698) %>% 
+speed <- box_read_rds(2193174265310) %>% 
   mutate(seg_id = as.character(seg_id)) %>% 
-  mutate(speed_measurement_hour = as.character(speed_measurement_hour)) %>% 
-  mutate(speed_measurement_hour = str_pad(speed_measurement_hour, width = 2, side = "left", pad = "0")) %>% 
   mutate(speed_measurement_month = as.character(speed_measurement_month)) %>% 
   mutate(speed_measurement_month = str_pad(speed_measurement_month, width = 2, side = "left", pad = "0")) %>% 
   left_join(speed_raw, by = "recordnum") %>% 
@@ -54,9 +52,38 @@ data_checked <- box_read_csv(2190702126891) %>%
   mutate(seg_id = as.character(seg_id)) 
 
 # Crash data
-crashes <- box_read(2172557691734) %>% 
+crashes <- box_read(2195155235316) %>% 
   mutate(seg_id = as.character(seg_id)) %>% 
-  mutate(crash_speed_involvement_rate = speeding / total_crashes)
+  # Collate into periods and reshape
+  mutate(crashes_a = evening + night) %>% 
+  mutate(ksi_a = ksi_eve + ksi_night) %>% 
+  select(seg_id, 
+         crashes_a, 
+         crashes_b = midday, 
+         crashes_c = pm_peak,
+         crashes_d = am_peak,
+         ksi_a,
+         ksi_b = ksi_midday,
+         ksi_c = ksi_pm,
+         ksi_d = ksi_am) %>% 
+  mutate(ksi_rate_a = ksi_a / crashes_a,
+         ksi_rate_b = ksi_b / crashes_b,
+         ksi_rate_c = ksi_c / crashes_c,
+         ksi_rate_d = ksi_d / crashes_d) %>% 
+  pivot_longer(!seg_id, 
+               names_pattern = "(.+)_(a|b|c|d)",
+               names_to = c("measure", "period"),
+               values_to = "value") %>% 
+  pivot_wider(names_from = "measure", 
+              values_from = "value") %>% 
+  mutate(speed_measurement_period =
+           case_when(period == "a" ~ "Off-peak (night)",  
+                     period == "b" ~ "Off-peak (midday)",
+                     period == "c" ~ "Peak (evening)",
+                     period == "d" ~ "Peak (morning)")) %>% 
+  mutate(speed_measurement_period =
+           fct_relevel(speed_measurement_period,
+                       "Off-peak (night)", "Off-peak (midday)", "Peak (evening)", "Peak (morning)"))
 
 # Street network data
 network_main <- box_read_rds(2151757279199) %>% 
@@ -124,7 +151,7 @@ modeling_data <- speed %>%
          all_speeding_percent,
          volume_total,
          speed_measurement_road,
-         year, speed_measurement_month, speed_measurement_day_of_week, speed_measurement_hour,
+         year, speed_measurement_month, speed_measurement_day_of_week, speed_measurement_period,
          speed_limit, 
          traffic_direction) %>% 
   # Join variable inputs
@@ -134,8 +161,8 @@ modeling_data <- speed %>%
   # Make sure to treat lanes not as a continuous variable
   mutate(lanes = as.factor(lanes)) %>% 
   left_join(crashes %>% 
-              select(seg_id, total_crashes, ksi_rate, crash_speed_involvement_rate),
-            by = "seg_id") %>% 
+              select(seg_id, speed_measurement_period, crashes, ksi_rate),
+            by = c("seg_id", "speed_measurement_period")) %>% 
   left_join(network_main %>% 
               select(seg_id, 
                      length, width, 
@@ -160,7 +187,7 @@ modeling_data <- speed %>%
   # mutate(width_per_lane = width / lanes) %>% 
   select(-c(year))
 
-# box_save_rds(modeling_data, file_name = "modeling_data_v7.rds", dir_id = 372762671750)
+# box_save_rds(modeling_data, file_name = "modeling_data_v8.rds", dir_id = 372762671750)
 
 # Create training/test partition --------------------------------------------------------------
 
@@ -188,7 +215,7 @@ recipe_0 <- recipe(modeling_train) %>%
 
 # Minimal model (RF): City road classification
 recipe_minimal_rf_city <- recipe_0 %>% 
-  update_role(speed_measurement_hour, 
+  update_role(speed_measurement_period, 
               lanes,
               road_classification_city,
               volume_total,
@@ -196,7 +223,7 @@ recipe_minimal_rf_city <- recipe_0 %>%
 
 # Minimal model (RF): FHWA road classification
 recipe_minimal_rf_fhwa <- recipe_0 %>% 
-  update_role(speed_measurement_hour, 
+  update_role(speed_measurement_period, 
               lanes,
               road_classification_fhwa,
               volume_total,
@@ -204,7 +231,7 @@ recipe_minimal_rf_fhwa <- recipe_0 %>%
 
 # Main model (RF): City road classification
 recipe_main_rf_city <- recipe_0 %>% 
-  update_role(speed_measurement_hour, 
+  update_role(speed_measurement_period, 
               lanes,
               road_classification_city,
               divided_roadway,
@@ -223,13 +250,13 @@ recipe_main_rf_city <- recipe_0 %>%
               count_intersection_ctrl,
               length,
               width,
-              total_crashes,
+              crashes,
               ksi_rate,
               new_role = "predictor")
 
 # Main model (RF): FHWA road classification
 recipe_main_rf_fhwa <- recipe_0 %>% 
-  update_role(speed_measurement_hour, 
+  update_role(speed_measurement_period, 
               lanes,
               road_classification_fhwa,
               divided_roadway,
@@ -248,7 +275,7 @@ recipe_main_rf_fhwa <- recipe_0 %>%
               count_intersection_ctrl,
               length,
               width,
-              total_crashes,
+              crashes,
               ksi_rate,
               new_role = "predictor")
 
@@ -299,13 +326,13 @@ collect_metrics(model_resamples)
 
 #   wflow_id                 .config              preproc model       .metric .estimator   mean     n  std_err
 #   <chr>                    <chr>                <chr>   <chr>       <chr>   <chr>       <dbl> <int>    <dbl>
-# 1 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.173     10 0.000833
-# 2 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.228     10 0.000932
-# 3 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.344     10 0.00351 
+# 1 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.159     10 0.00128 
+# 2 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.215     10 0.00171 
+# 3 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.336     10 0.00967 
 
-# 4 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0601    10 0.000211
-# 5 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0929    10 0.000499
-# 6 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.892     10 0.000900
+# 4 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0522    10 0.000822
+# 5 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0825    10 0.00132 
+# 6 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.905     10 0.00354 
 
 # Fit to training data ------------------------------------------------------------------------
 
@@ -320,10 +347,7 @@ best_workflow_id <- ranked_workflows %>%
 best_workflow <- models %>% 
   extract_workflow(id = best_workflow_id)
 
-# 13.587 sec elapsed
-tictoc::tic()
 best_fit <- fit(best_workflow, modeling_train)
-tictoc::toc()
 
 # # Or manually specify fit of interest
 # best_fit <- fit(workflow() %>% 
@@ -331,7 +355,8 @@ tictoc::toc()
 #                   add_model(rf_spec),
 #                 modeling_train)
 
-# Partial dependence plots --------------------------------------------------------------------
+
+# Model explanations --------------------------------------------------------------------------
 
 explainer <- explain_tidymodels(
   model  = best_fit,
@@ -340,26 +365,62 @@ explainer <- explain_tidymodels(
   label  = "Random Forest"
 )
 
-pdp_speed_measurement_hour <- 
+# Variable importance -------------------------------------------------------------------------
+
+set.seed(2718)
+vif <- model_parts(explainer = explainer, 
+                   loss_function = loss_root_mean_square,
+                   type = "difference",
+                   B = 10,
+                   N = NULL,
+                   variables = c("speed_measurement_period", 
+                                 "lanes",
+                                 "road_classification_city",
+                                 "divided_roadway",
+                                 "traffic_direction",
+                                 "speed_measurement_road",            
+                                 "speed_measurement_month",
+                                 "speed_measurement_day_of_week",
+                                 "speed_limit",
+                                 "volume_total",                      
+                                 "sidewalk_status", 
+                                 "parking",
+                                 "bike_lane_status",
+                                 "parcel_density",
+                                 "count_transit",
+                                 "traffic_calming",
+                                 "count_intersection_ctrl",
+                                 "length",
+                                 "width",
+                                 "crashes",
+                                 "ksi_rate"))
+
+plot(vif)
+
+
+
+# Partial dependence plots --------------------------------------------------------------------
+
+pdp_speed_measurement_period <- 
   model_profile(explainer, 
                 type      = "partial",   
-                variables = "speed_measurement_hour",
+                variables = "speed_measurement_period",
                 N         = NULL) 
 
-pdp_speed_measurement_hour_plot <- 
-  as_tibble(pdp_speed_measurement_hour$agr_profiles) %>% 
+pdp_speed_measurement_period_plot <- 
+  as_tibble(pdp_speed_measurement_period$agr_profiles) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8, color = "#ff9500") +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by hour of day",
+  labs(title = "Predicted probability of speeding by period of day",
        y = "Probability of speeding",
-       x = "Hour of day (24-hour time)")
+       x = "Period of day")
 
-pdp_speed_measurement_hour_plot
+pdp_speed_measurement_period_plot
 
-# ggsave(plot = pdp_speed_measurement_hour_plot, filename = "pdp_hour.svg", width = 6, height = 4)
+# ggsave(plot = pdp_speed_measurement_period_plot, filename = "pdp_hour.svg", width = 6, height = 4)
 
 pdp_lanes <- 
   model_profile(explainer, 
@@ -397,7 +458,7 @@ pdp_road_type_by_lanes_plot <-
                        "Minor Arterial",
                        "Collector Residential",
                        "Local Residential")) %>%
-  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`)) +
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8) +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
@@ -436,27 +497,27 @@ pdp_traffic_direction_by_lanes_plot
 
 # ggsave(plot = pdp_traffic_direction_by_lanes_plot, filename = "pdp_traffic_direction_by_lanes.svg", width = 7, height = 4)
 
-pdp_hour_by_lanes <- 
+pdp_period_by_lanes <- 
   model_profile(explainer, 
                 type      = "partial",   
-                variables = "speed_measurement_hour",
+                variables = "speed_measurement_period",
                 groups    = "lanes",
                 N         = NULL)
 
-pdp_hour_by_lanes_plot <- 
-  as_tibble(pdp_hour_by_lanes$agr_profiles) %>% 
+pdp_period_by_lanes_plot <- 
+  as_tibble(pdp_period_by_lanes$agr_profiles) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8) +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by number of lanes and measurement hour",
+  labs(title = "Predicted probability of speeding by number of lanes and measurement period",
        y = "Probability of speeding",
        x = "Number of lanes in roadway",
        color = "Lane count")
 
-pdp_hour_by_lanes_plot
-plotly::ggplotly(pdp_hour_by_lanes_plot)
+pdp_period_by_lanes_plot
+plotly::ggplotly(pdp_period_by_lanes_plot)
 
 # ggsave(plot = pdp_hour_by_lanes_plot, filename = "pdp_hour_by_lanes.svg", width = 7, height = 4)
 
