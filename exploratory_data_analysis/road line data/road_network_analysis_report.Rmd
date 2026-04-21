@@ -1,0 +1,912 @@
+---
+title: "OTIS speed-volume data exploratory analysis"
+author: "Demi Yang"
+date: "Last updated `r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    theme: sandstone
+knit: (
+  function(inputFile, encoding) { 
+    rmarkdown::render(
+      input = inputFile, 
+      encoding = encoding, 
+      output_file = paste0(substr(inputFile, 1, nchar(inputFile) - 4), "_", Sys.Date(),'.html')
+                     ) 
+                                }
+      )
+---
+
+<!-- Setting style parameters for output document -->
+
+<style>
+  body {
+    font-family: "Avenir", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    font-size: 16px !important;
+    line-height: 1.6 !important;
+    color: #3e3f3a;
+    background-color: #ffffff
+  }
+  title,
+  .title {
+    font-size: 33px !important;
+    font-weight: bold
+  }
+  h1,
+  .h1 {
+    font-size: 29px !important;
+    font-weight: bold
+  }
+  h2,
+  .h2 {
+    font-size: 25px !important;
+    font-weight: bold
+  }
+  h3,
+  .h3 {
+    font-size: 20px !important;
+    font-style: italic
+  }
+  .caption {
+  font-style: italic
+  }
+  .bold {
+  font-weight: bold
+  }
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 10,
+  fig.height = 7,
+  dpi = 300
+)
+
+options(scipen = 999)
+
+library(tidyverse)
+library(tidylog)
+library(janitor)
+library(scales)
+library(gt)
+library(boxr)
+library(sf)
+library(glue)
+
+sf_use_s2(FALSE)
+theme_set(theme_light())
+```
+
+```{r helpers, include=FALSE}
+gt_print <- function(data) {
+  data %>%
+    gt() %>%
+    tab_style(
+      style = cell_text(weight = "bold"),
+      locations = list(
+        cells_column_labels(),
+        cells_row_groups(),
+        cells_column_spanners()
+      )
+    ) %>%
+    fmt_number(where(is.numeric), decimals = 3)
+}
+
+first_non_na <- function(x) {
+  x2 <- x[!is.na(x) & x != ""]
+  if (length(x2) == 0) NA else x2[1]
+}
+
+to_num <- function(x) {
+  x <- as.character(x)
+  x <- stringr::str_trim(x)
+  x[x %in% c("", "NA", "N/A", "NULL")] <- NA
+  suppressWarnings(as.numeric(x))
+}
+
+safe_max_num <- function(x) {
+  x <- x[!is.na(x)]
+  if (length(x) == 0) return(NA_real_)
+  max(x)
+}
+
+safe_median_num <- function(x) {
+  x <- x[!is.na(x)]
+  if (length(x) == 0) return(NA_real_)
+  median(x)
+}
+
+box_read_sf <- function(file_id, filename, local_dir) {
+  box_dl(file_id = file_id, local_dir = local_dir, overwrite = TRUE)
+  st_read(file.path(local_dir, filename), quiet = TRUE) %>% clean_names()
+}
+```
+
+# 1. Introduction
+
+This document supports the Spring 2026 MUSA Practicum project *Understanding Off-Peak Roadway Safety*, which investigates how roadway design, traffic conditions, and temporal patterns are associated with high-speed driving and severe crash risk in Philadelphia. As part of that broader workflow, this file focuses on building the foundational street-segment dataset that will later feed feature engineering, modeling, and application development.
+
+Specifically, this document does the following:
+
+1. constructs a base road network for analysis by using city centerline as the spatial backbone and aligning it with the city RMSADMIN layer;
+2. enriches that network with segment-level attributes from Complete Streets, Bike Network, and RMSADMIN so that multiple roadway datasets can be related to a common geometry;
+3. performs validation and data-quality checks to understand spatial coverage, matching logic, and attribute completeness; and
+4. exports a cleaned network layer that can serve as a reproducible input for downstream model training and scenario-based safety analysis.
+
+# 2. Data acquisition
+
+```{r data-acquisition}
+td <- tempdir()
+box_auth()
+
+complete <- box_read_sf("2137971582623", "CompleteStreets.geojson", td)
+bike     <- box_read_sf("2137959450032", "Bike_Network.geojson", td)
+center   <- box_read_sf("2137970615238", "Street_Centerline.geojson", td)
+
+rms_parts <- c(
+  "2108423663911", "2108435833942", "2108435531810", "2108431679008",
+  "2108434322033", "2108426050906", "2108435288936", "2108433582721"
+)
+
+arterial_parts <- c(
+  "2175280245212", "2175276261512", "2175279800547", "2175279340140",
+  "2175279873182"
+)
+
+for (fid in arterial_parts) {
+  box_dl(file_id = fid, local_dir = td, overwrite = TRUE)
+}
+arterial <- st_read(file.path(td, "typologies_updated_.shp"), quiet = TRUE) %>% clean_names()
+for (fid in rms_parts) {
+  box_dl(file_id = fid, local_dir = td, overwrite = TRUE)
+}
+rms <- st_read(file.path(td, "GISDATA_RMSADMIN.shp"), quiet = TRUE) %>% clean_names()
+```
+
+```{r layer-overview}
+layer_overview <- tibble(
+  layer = c("RMSADMIN", "Street Centerline", "Bike Network", "Complete Streets", "Arterial Typology"),
+  source = c("PennDOT", "OpenDataPhilly", "OpenDataPhilly", "OpenDataPhilly", "DVRPC"),
+  features = c(nrow(rms), nrow(center), nrow(bike), nrow(complete), nrow(arterial)),
+  crs = c(
+    st_crs(rms)$input,
+    st_crs(center)$input,
+    st_crs(bike)$input,
+    st_crs(complete)$input,
+    st_crs(arterial)$input
+  ),
+  geometry_type = c(
+    paste(unique(st_geometry_type(rms)), collapse = ", "),
+    paste(unique(st_geometry_type(center)), collapse = ", "),
+    paste(unique(st_geometry_type(bike)), collapse = ", "),
+    paste(unique(st_geometry_type(complete)), collapse = ", "),
+    paste(unique(st_geometry_type(arterial)), collapse = ", ")
+  )
+)
+
+gt_print(layer_overview)
+```
+
+
+# 3. Preprocessing
+
+All layers are projected to a common local CRS and reduced to the fields required for the downstream workflow.
+
+```{r preprocessing}
+target_crs <- 2272  # NAD83 / Pennsylvania South (ftUS)
+
+rms_t      <- st_transform(st_make_valid(rms), target_crs)
+center_t   <- st_transform(st_make_valid(center), target_crs)
+bike_t     <- st_transform(st_make_valid(bike), target_crs)
+complete_t <- st_transform(st_make_valid(complete), target_crs)
+arterial_t <- st_transform(st_make_valid(arterial), target_crs)
+
+center_keep <- center_t %>%
+  select(
+    fnode, tnode, seg_id, class, st_type, oneway, stname,
+    shape_length, length,
+    zip_left, zip_right,
+    l_f_add, l_t_add, r_f_add, r_t_add,
+    st_code,
+    geometry
+  )
+
+bike_keep <- bike_t %>%
+  select(
+    seg_id,
+    class, type, oneway,
+    geometry
+  )
+
+rms_keep <- rms_t %>%
+  select(
+    speed_limi, fhwa_func, func_cls, juris, maint_func, fed_aid_sy,
+    st_rt_no, seg_bgn, offset_bgn, seg_end, offset_end, seg_pt_bgn, seg_pt_end,
+    geometry
+  )
+
+complete_keep <- complete_t %>%
+  select(
+    seg_id, combined_s, oneway,
+    class, class1, speedlim, street_typ, surfawidth, parking, sidewlk_wd, wlk_zn,
+    geometry
+  )
+
+arterial_keep <- arterial_t %>%
+  select(
+    comb_id, typology, div_rdwy, new_wid, new_lanes, rev_lu,
+    geometry
+  )
+```
+
+This step does two things. First, it ensures all geometry operations use the same coordinate system, which is necessary for buffering and intersection-based matching. Second, it narrows the data model to fields that are analytically relevant, reducing the chance of carrying forward redundant or inconsistent attributes.
+
+# 4. Build the base road network
+
+The base network is defined by buffering the RMSADMIN layer for 65 ft and retaining all centerline segments that intersect that corridor.
+
+```{r build-base-network}
+buffer_ft <- 65  # approximately 20 meters
+
+rms_corridor <- rms_keep %>%
+  st_union() %>%
+  st_buffer(dist = buffer_ft)
+
+center_flag <- center_keep %>%
+  mutate(kept = st_intersects(geometry, rms_corridor, sparse = FALSE)[, 1])
+
+base_network <- center_flag %>%
+  filter(kept) %>%
+  select(-kept)
+
+base_network_summary <- tibble(
+  metric = c("Centerline segments", "Retained in base network", "Dropped from base network"),
+  value = c(
+    nrow(center_keep),
+    nrow(base_network),
+    nrow(center_keep) - nrow(base_network)
+  )
+)
+
+gt_print(base_network_summary)
+```
+
+```{r base-network-map}
+p_base <- ggplot() +
+  geom_sf(data = rms_keep, aes(color = "RMS"), linewidth = 0.25, alpha = 0.25) +
+  geom_sf(data = filter(center_flag, kept),
+          aes(color = "Kept (Base Network)"),
+          linewidth = 0.25, alpha = 0.90) +
+  geom_sf(data = filter(center_flag, !kept),
+          aes(color = "Dropped (Outside RMS corridor)"),
+          linewidth = 0.70, alpha = 0.95) +
+  scale_color_manual(
+    name = NULL,
+    values = c(
+      "RMS" = "grey50",
+      "Kept (Base Network)" = "#156082",
+      "Dropped (Outside RMS corridor)" = "#ff9500"
+    )
+  ) +
+  labs(
+    title = "Centerline filtering using the RMS corridor",
+    subtitle = paste0(
+      "Total centerline segments: ", comma(nrow(center_keep)),
+      " | Kept: ", comma(nrow(base_network)),
+      " | Dropped: ", comma(nrow(center_keep) - nrow(base_network))
+    )
+  ) +
+  theme(legend.position = "bottom")
+
+p_base
+```
+
+```{r base-network-zoom}
+pt <- st_sfc(st_point(c(-75.1636, 39.9524)), crs = 4326) %>% st_transform(target_crs)
+xy <- st_coordinates(pt)
+xmid <- xy[1]
+ymid <- xy[2]
+half_window_ft <- 5280
+
+p_zoom <- p_base +
+  coord_sf(
+    xlim = c(xmid - half_window_ft, xmid + half_window_ft),
+    ylim = c(ymid - half_window_ft, ymid + half_window_ft)
+  ) +
+  labs(title = "Zoom-in: Center City area")
+
+p_zoom
+```
+
+```{r base-network-interpretation, results='asis', echo=FALSE}
+kept_n <- nrow(base_network)
+total_n <- nrow(center_keep)
+dropped_n <- total_n - kept_n
+kept_share <- kept_n / total_n
+
+cat(glue(
+"The RMS-derived corridor retains **{comma(kept_n)}** of **{comma(total_n)}** centerline segments, or **{percent(kept_share, accuracy = 0.1)}** of the source network. This indicates that the buffered RMSADMIN layer captures most of the streets that are relevant to the monitored corridor while excluding a smaller set of peripheral or weakly aligned segments.
+
+The dropped segments should not automatically be interpreted as errors. In practice, they are likely to represent local streets outside the RMS coverage, geometric offsets between datasets, or isolated segments that do not belong to the target monitoring network."
+))
+```
+
+# 5. Attribute enrichment
+
+The base network is enriched in four stages: a direct join from Complete Streets, a spatial overlap join from the Bike Network, a coverage-propagation join from RMSADMIN, and a constrained arterial-typology join from the DVRPC arterial layer.
+
+## 5.1 Complete Streets join
+
+Complete Streets attributes are joined by `seg_id`. Because the source contains repeated `seg_id` values, the table is first collapsed to one record per segment.
+
+```{r join-complete-streets}
+complete_clean <- complete_keep %>%
+  st_drop_geometry() %>%
+  mutate(
+    seg_id = as.character(seg_id),
+    speedlim = to_num(speedlim),
+    surfawidth = to_num(surfawidth)
+  )
+
+complete_1to1 <- complete_clean %>%
+  group_by(seg_id) %>%
+  summarise(
+    combined_s = first_non_na(combined_s),
+    oneway_cs  = first_non_na(oneway),
+    class_cs   = first_non_na(class),
+    class1_cs  = first_non_na(class1),
+    speedlim   = safe_max_num(speedlim),
+    street_typ = first_non_na(street_typ),
+    surfawidth = safe_median_num(surfawidth),
+    parking    = first_non_na(parking),
+    wlk_zn     = first_non_na(wlk_zn),
+    .groups = "drop"
+  )
+
+base_plus_complete <- base_network %>%
+  mutate(seg_id = as.character(seg_id)) %>%
+  left_join(complete_1to1, by = "seg_id")
+```
+
+## 5.2 Bike Network join
+
+Bike attributes are transferred through a buffered spatial intersection so that nearby, slightly misaligned facilities can still be recognized as overlapping the base network.
+
+```{r join-bike-network}
+bike_buffer_ft <- 30
+
+bike_buf <- bike_keep %>%
+  st_buffer(dist = bike_buffer_ft) %>%
+  mutate(bike_row = row_number())
+
+bike_inter <- st_intersection(
+  base_plus_complete %>% select(seg_id),
+  bike_buf %>% select(bike_row)
+)
+
+bike_attr <- bike_keep %>%
+  st_drop_geometry() %>%
+  mutate(bike_row = row_number()) %>%
+  select(bike_row, class, type, oneway)
+
+bike_to_seg <- bike_inter %>%
+  st_drop_geometry() %>%
+  left_join(bike_attr, by = "bike_row") %>%
+  group_by(seg_id) %>%
+  summarise(
+    bike_any = TRUE,
+    bike_class = paste(sort(unique(na.omit(class))), collapse = "|"),
+    bike_type = paste(sort(unique(na.omit(type))), collapse = "|"),
+    bike_oneway = paste(sort(unique(na.omit(oneway))), collapse = "|"),
+    .groups = "drop"
+  )
+
+base_plus_bike <- base_plus_complete %>%
+  left_join(bike_to_seg, by = "seg_id") %>%
+  mutate(bike_any = replace_na(bike_any, FALSE))
+```
+
+## 5.3 RMSADMIN propagation
+
+RMSADMIN attributes are transferred to the base network by intersecting the base network with a buffered RMS layer and selecting the RMS record with the largest overlap for each segment.
+
+```{r join-rmsadmin}
+rms_buffer_ft <- 65
+
+rms_buf <- rms_keep %>%
+  st_buffer(dist = rms_buffer_ft) %>%
+  mutate(rms_row = row_number())
+
+inter <- st_intersection(
+  base_plus_bike %>% select(seg_id),
+  rms_buf %>% select(rms_row)
+)
+
+inter_key <- inter %>%
+  mutate(int_len_ft = as.numeric(st_length(geometry))) %>%
+  st_drop_geometry() %>%
+  group_by(seg_id) %>%
+  slice_max(int_len_ft, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+rms_attr <- rms_keep %>%
+  st_drop_geometry() %>%
+  mutate(rms_row = row_number()) %>%
+  select(
+    rms_row,
+    speed_limi, fhwa_func, func_cls, juris, maint_func, fed_aid_sy,
+    st_rt_no, seg_bgn, offset_bgn, seg_end, offset_end, seg_pt_bgn, seg_pt_end
+  )
+
+base_network_enriched <- base_plus_bike %>%
+  left_join(inter_key, by = "seg_id") %>%
+  left_join(rms_attr, by = "rms_row") %>%
+  mutate(rms_matched = !is.na(rms_row)) %>%
+  select(-rms_row)
+```
+
+## 5.4 DVRPC arterial typology join
+
+The DVRPC arterial layer is treated as a subset network rather than a full replacement for the city centerline. To reduce false matches, typology fields are only assigned to base-network segments that are already likely to function as arterial roads in both classification systems: `fhwa_func` must be one of 2(Principal Arterial – Other Freeways and Expressways), 3(Principal Arterial – Other), or 4(Minor Arterial), and `class` must be one of 1(Expressways), 2(Major Arterial), or 3(Minor Arterial). Among those candidate segments, the join first keeps only base segments falling within a 50-ft buffer of the arterial layer, then assigns the attributes of the nearest arterial segment. Segments outside that constrained candidate set remain missing for the arterial typology fields by design. The matched `comb_id` field is retained so that each assigned base-network segment can be traced back to the corresponding DVRPC arterial record.
+
+```{r join-arterial-typology}
+# 1. define arterial-eligible base segments using both classification systems
+base0 <- base_network_enriched %>%
+  mutate(
+    base_rowid = row_number(),
+    is_arterial_candidate = fhwa_func %in% c(2, 3, 4) & class %in% c(1, 2, 3)
+  )
+
+# 2. create a buffered arterial subset for candidate screening
+arterial_buffer_ft <- 50
+
+arterial_buf <- arterial_keep %>%
+  st_buffer(dist = arterial_buffer_ft)
+
+base_candidate <- base0 %>%
+  filter(is_arterial_candidate)
+
+candidate_hit <- st_intersects(
+  base_candidate,
+  st_union(arterial_buf),
+  sparse = FALSE
+)[, 1]
+
+base_candidate_hit <- base_candidate %>%
+  filter(candidate_hit)
+
+# 3. assign each candidate base segment to the nearest arterial record
+nearest_id <- st_nearest_feature(base_candidate_hit, arterial_keep)
+
+dist_vec <- st_distance(
+  st_geometry(base_candidate_hit),
+  st_geometry(arterial_keep[nearest_id, ]),
+  by_element = TRUE
+)
+
+matched_candidate <- base_candidate_hit %>%
+  mutate(
+    matched_comb_id = arterial_keep$comb_id[nearest_id],
+    dist_to_arterial = as.numeric(dist_vec),
+    typology   = arterial_keep$typology[nearest_id],
+    div_rdwy   = arterial_keep$div_rdwy[nearest_id],
+    new_wid    = arterial_keep$new_wid[nearest_id],
+    new_lanes  = arterial_keep$new_lanes[nearest_id],
+    rev_lu     = arterial_keep$rev_lu[nearest_id]
+  )
+
+# 4. write the arterial fields back to the full enriched network
+base_network_clean <- base0 %>%
+  select(-any_of(c(
+    "matched_comb_id", "typology", "div_rdwy", "new_wid", "new_lanes", "rev_lu", "dist_to_arterial"
+  ))) %>%
+  left_join(
+    matched_candidate %>%
+      st_drop_geometry() %>%
+      select(
+        base_rowid,
+        matched_comb_id,
+        typology,
+        div_rdwy,
+        new_wid,
+        new_lanes,
+        rev_lu,
+        dist_to_arterial
+      ),
+    by = "base_rowid"
+  ) %>%
+  mutate(arterial_matched = !is.na(matched_comb_id)) %>%
+  select(-base_rowid, -is_arterial_candidate)
+```
+
+```{r arterial-match-rate}
+arterial_match_check <- base_network_enriched %>%
+  st_drop_geometry() %>%
+  mutate(
+    is_arterial_fhwa = fhwa_func %in% c(2, 3, 4),
+    has_typology = !is.na(typology)
+  ) %>%
+  count(is_arterial_fhwa, has_typology) %>%
+  group_by(is_arterial_fhwa) %>%
+  mutate(
+    pct_within_group = n / sum(n)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    is_arterial_fhwa = if_else(is_arterial_fhwa, "FHWA arterial (2/3/4)", "Non-FHWA arterial"),
+    has_typology = if_else(has_typology, "Matched to DVRPC arterial", "Not matched")
+  )
+
+arterial_match_check %>%
+  gt() %>%
+  fmt_percent(columns = pct_within_group, decimals = 1)
+```
+
+## 5.6 Join Summary
+
+```{r join-summary}
+join_summary <- tibble(
+  step = c(
+    "Complete Streets matched",
+    "Bike Network matched",
+    "RMSADMIN matched",
+    "DVRPC arterial typology matched"
+  ),
+  n_segments = c(
+    sum(!is.na(base_plus_complete$combined_s)),
+    sum(base_plus_bike$bike_any, na.rm = TRUE),
+    sum(base_network_enriched$rms_matched, na.rm = TRUE),
+    sum(base_network_enriched$arterial_matched, na.rm = TRUE)
+  ),
+  share = c(
+    mean(!is.na(base_plus_complete$combined_s)),
+    mean(base_plus_bike$bike_any, na.rm = TRUE),
+    mean(base_network_enriched$rms_matched, na.rm = TRUE),
+    mean(base_network_enriched$arterial_matched, na.rm = TRUE)
+  )
+)
+
+join_summary %>%
+  gt() %>%
+  fmt_percent(columns = share, decimals = 1)
+```
+
+```{r enrichment-interpretation, results='asis', echo=FALSE}
+complete_share <- mean(!is.na(base_plus_complete$combined_s))
+bike_share <- mean(base_plus_bike$bike_any, na.rm = TRUE)
+rms_share <- mean(base_network_enriched$rms_matched, na.rm = TRUE)
+arterial_share <- mean(base_network_enriched$arterial_matched, na.rm = TRUE)
+
+fhwa_arterial_match <- base_network_enriched %>%
+  st_drop_geometry() %>%
+  filter(fhwa_func %in% c(2, 3, 4)) %>%
+  summarise(match_rate = mean(!is.na(typology))) %>%
+  pull(match_rate)
+
+non_fhwa_match <- base_network_enriched %>%
+  st_drop_geometry() %>%
+  filter(!(fhwa_func %in% c(2, 3, 4))) %>%
+  summarise(match_rate = mean(!is.na(typology))) %>%
+  pull(match_rate)
+
+cat(glue(
+"From a coverage perspective, the joins are intentionally asymmetric. Complete Streets and RMSADMIN are expected to support many segments in the base network, while Bike Network coverage is expected to be lower because bicycle facilities are concentrated on selected streets. The DVRPC arterial typology layer is even more selective because it is treated as a subset network and is only allowed to attach to arterial-like base segments under both the FHWA and centerline classification systems. In this run, the matched shares are **{percent(complete_share, accuracy = 0.1)}** for Complete Streets, **{percent(bike_share, accuracy = 0.1)}** for Bike Network, **{percent(rms_share, accuracy = 0.1)}** for RMSADMIN, and **{percent(arterial_share, accuracy = 0.1)}** for the DVRPC arterial typology join. Within the FHWA arterial subset (`fhwa_func` in 2, 3, 4), **{percent(fhwa_arterial_match, accuracy = 0.1)}** of segments receive DVRPC typology attributes, while the non-FHWA subset remains largely unmatched by design at **{percent(non_fhwa_match, accuracy = 0.1)}**."
+))
+```
+
+# 6. Field provenance
+
+The final network combines attributes from multiple sources. The table below documents the intended origin of the major fields retained in the cleaned output.
+
+```{r field-lineage}
+library(dplyr)
+library(tibble)
+library(purrr)
+library(sf)
+
+# use the final joined dataset for field metadata
+final_data <- base_network_enriched
+
+detect_data_type <- function(x) {
+  if (inherits(x, "integer")) {
+    "Integer"
+  } else if (inherits(x, "numeric")) {
+    "Numeric"
+  } else if (inherits(x, "character")) {
+    "Text"
+  } else if (inherits(x, "factor")) {
+    "Categorical"
+  } else if (inherits(x, "logical")) {
+    "Logical"
+  } else if (inherits(x, "Date")) {
+    "Date"
+  } else if (inherits(x, c("POSIXct", "POSIXt"))) {
+    "Datetime"
+  } else {
+    class(x)[1]
+  }
+}
+
+summarize_value_range <- function(x) {
+  x_no_na <- x[!is.na(x)]
+  
+  if (length(x_no_na) == 0) {
+    return("All values missing")
+  }
+  
+  if (inherits(x, c("integer", "numeric"))) {
+    return(paste0(signif(min(x_no_na), 5), " to ", signif(max(x_no_na), 5)))
+  }
+  
+  if (inherits(x, "logical")) {
+    return(paste(sort(unique(x_no_na)), collapse = ", "))
+  }
+  
+  if (inherits(x, "Date")) {
+    return(paste0(min(x_no_na), " to ", max(x_no_na)))
+  }
+  
+  if (inherits(x, c("POSIXct", "POSIXt"))) {
+    return(paste0(min(x_no_na), " to ", max(x_no_na)))
+  }
+  
+  vals <- unique(as.character(x_no_na))
+  vals <- vals[order(vals)]
+  
+  if (length(vals) <= 5) {
+    paste(vals, collapse = ", ")
+  } else {
+    paste0(paste(vals[1:5], collapse = ", "), ", ...")
+  }
+}
+
+get_field_meta <- function(field_name, data = final_data) {
+  if (!(field_name %in% names(data))) {
+    return(list(data_type = NA_character_, value_range = NA_character_))
+  }
+  
+  x <- data[[field_name]]
+  
+  list(
+    data_type = detect_data_type(x),
+    value_range = summarize_value_range(x)
+  )
+}
+
+field_lineage <- tribble(
+  ~field,         ~source,                  ~notes,
+  "seg_id",       "Street Centerline",      "Primary segment key used for base network construction",
+  "fnode",        "Street Centerline",      "From-node identifier",
+  "tnode",        "Street Centerline",      "To-node identifier",
+  "class",        "Street Centerline",      "Base roadway classification",
+  "st_type",      "Street Centerline",      "Street type",
+  "oneway",       "Street Centerline",      "Base one-way indicator",
+  "stname",       "Street Centerline",      "Street name",
+  "shape_length", "Street Centerline",      "Segment length from source geometry",
+  "st_code",      "Street Centerline",      "Street code",
+  "combined_s",   "Complete Streets",       "Combined segment descriptor",
+  "oneway_cs",    "Complete Streets",       "One-way indicator from Complete Streets",
+  "class_cs",     "Complete Streets",       "Class from Complete Streets",
+  "class1_cs",    "Complete Streets",       "Additional class field from Complete Streets",
+  "speedlim",     "Complete Streets",       "Posted speed limit where available",
+  "street_typ",   "Complete Streets",       "Street typology",
+  "surfawidth",   "Complete Streets",       "Surface width",
+  "parking",      "Complete Streets",       "Parking attribute",
+  "wlk_zn",       "Complete Streets",       "Walk zone field",
+  "bike_any",     "Bike Network (derived)", "Whether the segment overlaps bike infrastructure",
+  "bike_class",   "Bike Network",           "Bike facility class",
+  "bike_type",    "Bike Network",           "Bike facility type",
+  "bike_oneway",  "Bike Network",           "Bike one-way indicator",
+  "speed_limi",   "RMSADMIN",               "RMS speed limit field",
+  "fhwa_func",    "RMSADMIN",               "FHWA functional class",
+  "func_cls",     "RMSADMIN",               "Functional class",
+  "juris",        "RMSADMIN",               "Jurisdiction",
+  "maint_func",   "RMSADMIN",               "Maintenance function",
+  "fed_aid_sy",   "RMSADMIN",               "Federal aid system",
+  "st_rt_no",     "RMSADMIN",               "State route number",
+  "seg_bgn",      "RMSADMIN",               "RMS segment begin",
+  "seg_end",      "RMSADMIN",               "RMS segment end",
+    "matched_comb_id", "DVRPC arterial typology", "Matched arterial record identifier (COMB_ID)",
+  "typology",      "DVRPC arterial typology", "Typology class of arterials joined from the DVRPC arterial layer",
+  "div_rdwy",        "DVRPC arterial typology", "Divided-roadway indicator from the DVRPC arterial layer",
+  "new_wid",         "DVRPC arterial typology", "Joined roadway-width field from the DVRPC arterial layer",
+  "new_lanes",       "DVRPC arterial typology", "Joined lane-count field from the DVRPC arterial layer",
+  "rev_lu",          "DVRPC arterial typology", "Joined land-use context field from the DVRPC arterial layer",
+  "dist_to_arterial","DVRPC arterial typology", "Distance from the base segment to the matched arterial segment",
+) %>%
+  rowwise() %>%
+  mutate(meta = list(get_field_meta(field, final_data))) %>%
+  mutate(
+    data_type = meta$data_type,
+    value_range = meta$value_range
+  ) %>%
+  ungroup() %>%
+  select(field, source, data_type, value_range, notes)
+
+gt_print(field_lineage)
+```
+
+Across the input datasets, roadway hierarchy is represented using nine different classification fields.
+
+```{r roadway-classification-overview}
+classification_fields <- tribble(
+  ~field,       ~source,             ~notes,                                                ~description,
+  "class",      "Street Centerline", "Base roadway classification from the centerline layer", "Street class of arc:
+0-Navy Yard;
+1-Expressways;
+2-Major Arterial;
+3-Minor Arterial;
+4-Collector;
+5-Local;
+6-Driveway;
+9-Low Speed Ramps;
+10-High Speed Ramps;
+12-Non Travable;
+14-City Boundary;
+15-Walking Connector;
+18-Traffic Controlled Crosswalks",
+  "class_cs",   "Complete Streets",  "Classification field joined from Complete Streets",    "",
+  "class1_cs",  "Complete Streets",  "Additional classification field from Complete Streets","",
+  "street_typ", "Complete Streets",  "Street typology field from Complete Streets",          "",
+  "fhwa_func",  "RMSADMIN",          "FHWA Administrative Classifications of Roadway",                       "1-Interstate;
+2-Principal Arterial – Other Freeways and Expressways;
+3-Principal Arterial – Other;
+4-Minor Arterial;
+5-Major Collector;
+6-Minor Collector;
+7-Local",
+  "func_cls",   "RMSADMIN",          "Functional class field from RMSADMIN",                 "",
+  "juris",      "RMSADMIN",          "Jurisdiction-related roadway category",                "1-State Owned;
+2-Turnpike;
+3-Other Agency;
+4-Non-State Non-Federal Aid;
+5-Non-State Federal Aid
+6-Toll Bridges",
+  "maint_func", "RMSADMIN",          "Maintenance function classification",                  "A-Interstate Highway;
+B-Other Expressways and Principal Arterial Highways;
+C-Minor Arterial Highways;
+D-Collector Highways;
+E-Local Access Highways;
+F-Interchange Ramps",
+  "typology", "DVRPC arterial typology", "Typology field of arterials joined from the DVRPC arterial layer", ""
+) %>%
+  rowwise() %>%
+  mutate(meta = list(get_field_meta(field, final_data))) %>%
+  mutate(
+    data_type = meta$data_type,
+    value_range = meta$value_range
+  ) %>%
+  ungroup() %>%
+  select(field, source, data_type, value_range, notes, description)
+
+gt_print(classification_fields)
+
+```
+
+# 7. Data quality assessment
+
+A missingness scan is used to identify which variables are broadly usable, which require caution, and which may need to be dropped or imputed in future modeling work.
+
+```{r missingness}
+na_rate <- base_network_enriched %>%
+  st_drop_geometry() %>%
+  summarise(across(everything(), ~ mean(is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "field", values_to = "na_rate") %>%
+  arrange(desc(na_rate))
+
+na_rate %>%
+  slice_head(n = 25) %>%
+  gt() %>%
+  fmt_percent(columns = na_rate, decimals = 1)
+```
+
+```{r missingness-interpretation, results='asis', echo=FALSE}
+low_missing <- na_rate %>% filter(na_rate <= 0.10) %>% pull(field)
+high_missing <- na_rate %>% filter(na_rate >= 0.50) %>% pull(field)
+
+cat(glue(
+"Missingness is uneven across the final layer, which is typical for a multi-source roadway dataset. Fields inherited from the base centerline tend to be highly complete because they define the network itself. Joined attributes are more variable because they depend on identifier quality, spatial overlap, and source-specific coverage."
+))
+```
+# EDA
+
+
+# Appendix: optional structural checks
+
+Whether a segment runs from intersection to intersection and whether reverse-direction counterparts exist?
+
+```{r optional-structure-checks, eval=FALSE}
+# 用全网 centerline 算 node degree（更准确）
+node_degree <- center_t %>%
+  st_drop_geometry() %>%
+  distinct(seg_id, fnode, tnode) %>%
+  pivot_longer(cols = c(fnode, tnode), values_to = "node_id") %>%
+  filter(!is.na(node_id)) %>%
+  distinct(seg_id, node_id) %>%
+  count(node_id, name = "degree")
+
+# 把两端 degree 贴到 baseline_network_enriched 并做“路口到路口”判定
+baseline_deg <- base_network_enriched %>%
+  left_join(node_degree %>% transmute(fnode = node_id, degree_from = degree), by = "fnode") %>%
+  left_join(node_degree %>% transmute(tnode = node_id, degree_to   = degree), by = "tnode") %>%
+  mutate(
+    is_i2i = (degree_from >= 3) & (degree_to >= 3),
+    end_type = case_when(
+      degree_from >= 3 & degree_to >= 3 ~ "I2I (both ends >=3)",
+      (degree_from >= 3 & degree_to < 3) | (degree_from < 3 & degree_to >= 3) ~ "mixed (one end >=3)",
+      degree_from < 3 & degree_to < 3 ~ "non-I2I (both ends <3)",
+      TRUE ~ "unknown"
+    )
+  )
+
+# intersection-to-intersection占比
+# is_i2i = TRUE 表示：fnode 和 tnode 的 degree 都 ≥ 3 → 这条段很可能是“路口到路口”
+# is_i2i = FALSE 表示：至少有一端 degree < 3
+
+baseline_deg %>%
+  st_drop_geometry() %>%
+  count(is_i2i) %>%
+  mutate(pct = percent(n / sum(n), accuracy = 0.1))
+```
+```{r}
+baseline_deg %>%
+  st_drop_geometry() %>%
+  count(end_type) %>%
+  mutate(pct = percent(n / sum(n), accuracy = 0.1)) %>%
+  arrange(desc(n))
+
+baseline_deg %>%
+  st_drop_geometry() %>%
+  count(degree_from, degree_to) %>%
+  arrange(desc(n)) %>%
+  mutate(pct = percent(n / sum(n), accuracy = 0.1))
+```
+
+```{r}
+library(mapview)
+# 1) 先准备 node_degree：优先用全量 centerline 来算（避免子网边界导致 degree 偏小）
+if (exists("center")) {
+  nodes_src <- center
+} else {
+  # 如果你没有 center，就只能用最终网来算（注意 degree 会偏保守）
+  nodes_src <- baseline_network_enriched
+}
+
+node_degree <- nodes_src %>%
+  st_drop_geometry() %>%
+  distinct(seg_id, fnode, tnode) %>%
+  pivot_longer(cols = c(fnode, tnode), values_to = "node_id") %>%
+  filter(!is.na(node_id)) %>%
+  distinct(seg_id, node_id) %>%
+  count(node_id, name = "degree")
+
+# 2) 把两端 degree join 回最终网，并生成是否满足“两端都>=3”的标记
+baseline_deg <- base_network_enriched %>%
+  left_join(node_degree %>% transmute(fnode = node_id, degree_from = degree), by = "fnode") %>%
+  left_join(node_degree %>% transmute(tnode = node_id, degree_to   = degree), by = "tnode") %>%
+  mutate(
+    is_i2i = (degree_from >= 3) & (degree_to >= 3),
+    fail_reason = case_when(
+      is.na(degree_from) | is.na(degree_to) ~ "Missing degree (check nodes / join)",
+      degree_from < 3 & degree_to < 3 ~ "Both ends < 3",
+      degree_from < 3 & degree_to >= 3 ~ "From end < 3",
+      degree_from >= 3 & degree_to < 3 ~ "To end < 3",
+      TRUE ~ "OK"
+    )
+  )
+
+# 3) 筛出不满足条件的 segments
+bad_seg <- baseline_deg %>%
+  filter(!is_i2i) %>%
+  select(seg_id, degree_from, degree_to, fail_reason, geometry)
+
+# 4) 地图可视化（交互式）
+mapview(bad_seg, zcol = "fail_reason")
+```
+
+

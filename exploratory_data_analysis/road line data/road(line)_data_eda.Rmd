@@ -60,14 +60,12 @@ knit: (
 ```{r Setup, include = FALSE}
 
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
-options(scipen = 999)  # 取消科学计数法
-sf_use_s2(FALSE)
+options(scipen = 999)
 
 
 ```
 
-```{r Preliminaries}
-
+```{r}
 library(tidyverse)
 library(tidylog)
 library(janitor)
@@ -79,20 +77,44 @@ library(tidyverse)
 library(tidylog)
 library(janitor)
 library(gt)
+library(boxr)
+library(sf)
+library(dplyr)
+box_auth()
 
+box_ls(361756830786) %>% 
+  as.data.frame() %>% 
+  select(name, id, type)
+
+box_ls(366607875801) %>% 
+  as.data.frame() %>% 
+  select(name, id, type)
+
+sf_use_s2(FALSE)
 theme_set(theme_light())
 
-rms <- st_read("RMS_-_ADMIN_-_All//GISDATA_RMSADMIN.shp", quiet = TRUE) %>%
-  clean_names()
+```
 
-center <- st_read("Street_Centerline.geojson", quiet = TRUE) %>%
-  clean_names()
+```{r Preliminaries}
 
-bike <- st_read("Bike_Network.geojson", quiet = TRUE) %>%
-  clean_names()
+td <- tempdir()
 
-complete <- st_read("CompleteStreets.geojson", quiet = TRUE) %>%
-  clean_names()
+box_dl(file_id = "2137971582623", local_dir = td, overwrite = TRUE)
+complete <- st_read(file.path(td, "CompleteStreets.geojson"), quiet = TRUE) |> clean_names()
+
+box_dl(file_id = "2137959450032", local_dir = td, overwrite = TRUE)
+bike <- st_read(file.path(td, "Bike_Network.geojson"), quiet = TRUE) |> clean_names()
+
+box_dl(file_id = "2137970615238", local_dir = td, overwrite = TRUE)
+center <- st_read(file.path(td, "Street_Centerline.geojson"), quiet = TRUE) |> clean_names()
+
+rms_parts <- c(
+  "2108423663911","2108435833942","2108435531810","2108431679008",
+  "2108434322033","2108426050906","2108435288936","2108433582721"
+)
+for (fid in rms_parts) box_dl(file_id = fid, local_dir = td, overwrite = TRUE)
+
+rms <- st_read(file.path(td, "GISDATA_RMSADMIN.shp"), quiet = TRUE) |> clean_names()
 
 ```
 
@@ -147,6 +169,10 @@ print(list(
 ))
 ```
 
+plot 有价值的column分布（width）
+把单车道种类分颜色画出来，加上与单车有关的crash的点
+不同的道路分级跟crash做correlation，再看用哪个
+碰撞数据的id是什么体系，怎么join (road sequence no)
 
 ```{r Plot data}
 # =========================
@@ -180,7 +206,7 @@ complete_t <- st_transform(st_make_valid(complete), target_crs)
 # 2) Keep only needed fields
 center_keep <- center_t %>%
   select(
-    seg_id, class, st_type, oneway, stname,
+    fnode, tnode, seg_id, class, st_type, oneway, st_name,
     shape_length = shape_length,
     length,
     zip_left, zip_right,
@@ -227,6 +253,74 @@ base_network <- center_keep %>%
 cat("\nBase network segments:", nrow(base_network), "of", nrow(center_keep), "\n")
 
 
+```
+map这两个路网看起来差不多
+特别点出那600个missing
+
+```{r dev='png'}
+
+# 标记筛选前 centerline：哪些会被 RMS corridor 保留
+center_flag <- center_keep %>%
+  mutate(kept = st_intersects(geometry, rms_corridor, sparse = FALSE)[,1])
+
+cat("Kept:", sum(center_flag$kept), "Dropped:", sum(!center_flag$kept), "\n")
+
+p <- ggplot() +
+  # RMS 参考层（灰）
+  geom_sf(data = rms_keep, aes(color = "RMS"), linewidth = 0.25, alpha = 0.25) +
+  # 保留的 centerline（蓝）
+  geom_sf(data = filter(center_flag, kept),
+          aes(color = "Kept (Base Network)"),
+          linewidth = 0.25, alpha = 0.9) +
+  # 被筛掉的 centerline（红，画粗一点）
+  geom_sf(data = filter(center_flag, !kept),
+          aes(color = "Dropped (Not in RMS coverage)"),
+          linewidth = 0.7, alpha = 0.95) +
+  scale_color_manual(
+    name = NULL,
+    values = c(
+      "RMS" = "grey50",
+      "Kept (Base Network)" = "#156082",
+      "Dropped (Not in RMS coverage)" = "#ff9500"
+    )
+  ) +
+  labs(
+    title = "Centerline vs RMS coverage (Kept vs Dropped)",
+    subtitle = paste0(
+      "Centerline total: ", nrow(center_flag),
+      " | Kept: ", sum(center_flag$kept),
+      " | Dropped: ", sum(!center_flag$kept)
+    )
+  ) +
+  theme(legend.position = "bottom")
+
+# 保存到当前工作目录，避免 RStudio notebook 的缓存路径写不了
+ggsave("fig_centerline_rms_kept_dropped.png", p, width = 10, height = 7, dpi = 300)
+
+p
+
+
+```
+
+
+```{r}
+
+pt <- st_sfc(st_point(c(-75.1636, 39.9524)), crs = 4326) %>% st_transform(2272)
+xy <- st_coordinates(pt)
+xmid <- xy[1]; ymid <- xy[2]
+
+half_window_ft <- 2 * 5280 / 2
+
+p_zoom <- p +
+  coord_sf(
+    xlim = c(xmid - half_window_ft, xmid + half_window_ft),
+    ylim = c(ymid - half_window_ft, ymid + half_window_ft)
+  ) +
+  labs(title = "Zoom-in: Center City (2 miles x 2 miles)")
+
+ggsave("fig_centerline_rms_zoom_centercity.png", p_zoom, width = 10, height = 7, dpi = 300)
+p_zoom
+
 
 ```
 
@@ -253,8 +347,7 @@ complete_clean <- complete_keep %>%
   mutate(
     seg_id = as.character(seg_id),
     speedlim   = to_num(speedlim),
-    surfawidth = to_num(surfawidth),
-    sidewlk_wd = to_num(sidewlk_wd)
+    surfawidth = to_num(surfawidth)
   )
 
 
@@ -270,7 +363,6 @@ complete_1to1 <- complete_clean %>%
     street_typ  = first_non_na(street_typ),
     surfawidth  = suppressWarnings(median(surfawidth, na.rm = TRUE)),
     parking     = first_non_na(parking),
-    sidewlk_wd  = suppressWarnings(median(sidewlk_wd, na.rm = TRUE)),
     wlk_zn      = first_non_na(wlk_zn),
     .groups = "drop"
   ) %>%
@@ -286,16 +378,28 @@ base_plus_complete <- base_network %>%
 ```
 
 ```{r}
-# 5) STEP 2B: Join BikeNetwork
-#    - Try ID join first (bike has seg_id)
-#    - If match rate is low, fallback to spatial nearest matching.
 
-bike_by_id <- bike_keep %>%
+# ----------------------------
+# STEP 2B: Join Bike network -> base network 
+
+bike_buffer_ft <- 30
+bike_buf <- st_buffer(bike_keep, dist = bike_buffer_ft) %>%
+  mutate(bike_row = row_number())
+
+# 相交：保留 base 的 seg_id + bike_row
+bike_inter <- st_intersection(
+  base_plus_complete %>% select(seg_id),
+  bike_buf %>% select(bike_row)
+)
+
+bike_attr <- bike_keep %>%
   st_drop_geometry() %>%
-  transmute(
-    seg_id = as.character(seg_id),
-    class, type, oneway
-  ) %>%
+  mutate(bike_row = row_number()) %>%
+  select(bike_row, class, type, oneway)
+
+bike_to_seg <- bike_inter %>%
+  st_drop_geometry() %>%
+  left_join(bike_attr, by = "bike_row") %>%
   group_by(seg_id) %>%
   summarise(
     bike_any = TRUE,
@@ -306,9 +410,11 @@ bike_by_id <- bike_keep %>%
   )
 
 base_plus_bike <- base_plus_complete %>%
-  mutate(seg_id = as.character(seg_id)) %>%
-  left_join(bike_by_id, by = "seg_id")
+  left_join(bike_to_seg, by = "seg_id")
 
+# 检查覆盖率（应该接近你算的 intersects ~0.308，可能略有差异）
+mean(!is.na(base_plus_bike$bike_any))
+table(base_plus_bike$bike_any, useNA = "ifany")
 
 ```
 
@@ -322,7 +428,7 @@ base_plus_bike <- base_plus_complete %>%
 # RMS small buffer -> Intersect with base -> Select the RMS with the maximum intersection length for each seg_id
 
 
-rms_buffer_ft <- 60  # 30–100ft 都可试；越大越“宽松”
+rms_buffer_ft <- 65  # 30–100ft 都可试；越大越“宽松”
 rms_buf <- st_buffer(rms_keep, dist = rms_buffer_ft) %>%
   mutate(rms_row = row_number())
 
@@ -386,6 +492,784 @@ gt_print(head(na_rate, 30))
 
 ```
 
+```{r Field lineage table}
+
+  # --- Centerline (base network) ---
+  # "seg_id",       "Street_Centerline (base network key)",
+  # "class",        "Street_Centerline",
+  # "st_type",      "Street_Centerline",
+  # "oneway",       "Street_Centerline",
+  # "stname",       "Street_Centerline",
+  # "shape_length", "Street_Centerline",
+  # "length",       "Street_Centerline",
+  # "zip_left",     "Street_Centerline",
+  # "zip_right",    "Street_Centerline",
+  # "l_f_add",      "Street_Centerline",
+  # "l_t_add",      "Street_Centerline",
+  # "r_f_add",      "Street_Centerline",
+  # "r_t_add",      "Street_Centerline",
+  # "st_code",      "Street_Centerline",
+  # "geometry",     "Street_Centerline",
+
+  # --- CompleteStreets (joined by seg_id) ---
+  # "combined_s",   "CompleteStreets,
+  # "oneway_cs",    "CompleteStreets,
+  # "class_cs",     "CompleteStreets,
+  # "class1_cs",    "CompleteStreets,
+  # "speedlim",     "CompleteStreets,
+  # "street_typ",   "CompleteStreets,
+  # "surfawidth",   "CompleteStreets,
+  # "parking",      "CompleteStreets,
+  # "sidewlk_wd",   "CompleteStreets,
+  # "wlk_zn",       "CompleteStreets,
+
+  # --- Bike Network (spatial match) ---
+  # "bike_any",     "Bike_Network,
+  # "bike_class",   "Bike_Network,
+  # "bike_type",    "Bike_Network,
+  # "bike_oneway",  "Bike_Network,
+# bike lanes的建成时间的field
+# bike lanes有无speed observation,有的才看年份
+
+  # --- RMSADMIN (coverage propagation via intersection) ---
+  # "speed_limi",   "RMSADMIN,
+  # "fhwa_func",    "RMSADMIN,
+  # "func_cls",     "RMSADMIN,
+  # "juris",        "RMSADMIN,
+  # "maint_func",   "RMSADMIN,
+  # "fed_aid_sy",   "RMSADMIN,
+  # "st_rt_no",     "RMSADMIN,
+  # "seg_bgn",      "RMSADMIN,
+  # "offset_bgn",   "RMSADMIN,
+  # "seg_end",      "RMSADMIN,
+  # "offset_end",   "RMSADMIN,
+  # "seg_pt_bgn",   "RMSADMIN,
+  # "seg_pt_end",   "RMSADMIN,
+```
 
 
+
+```{r}
+
+library(boxr)
+
+box_auth()
+
+target_folder_id <- 362958210990  # 换成你的 Box 文件夹ID
+
+# 先保存成临时 rds
+tmp_path <- file.path(tempdir(), "base_network_enriched.rds")
+saveRDS(base_network_enriched, tmp_path)
+
+# 上传到 Box（box_ul = upload）
+box_ul(tmp_path, dir_id = target_folder_id)
+
+```
+```{r}
+# 3) 上传到同一个 Box 文件夹（同名则更新版本）
+ul <- box_ul(tmp_path_clean, dir_id = target_folder_id)
+
+# 4) 安全打印共享链接（如果存在）
+shared_link <- ul$shared_link
+
+link_txt <- NA_character_
+if (is.null(shared_link)) {
+  link_txt <- NA_character_
+} else if (is.list(shared_link) && !is.null(shared_link$url)) {
+  link_txt <- shared_link$url
+} else {
+  link_txt <- toString(unlist(shared_link))
+}
+
+cat(" shared link :", link_txt, "\n\n")
+```
+
+```{r}
+# 1) 只保留需要的字段
+keep_cols <- c(
+  "fnode","tnode","seg_id","class","st_type","oneway","stname","geometry","st_code",
+  "combined_s","oneway_cs","class_cs","class1_cs",
+  "speedlim","street_typ","surfawidth","parking",
+  "bike_any","bike_class","bike_type","bike_oneway",
+  "speed_limi","fhwa_func","func_cls","juris","maint_func","fed_aid_sy","length"
+)
+
+missing_cols <- setdiff(keep_cols, names(base_network_enriched))
+if (length(missing_cols) > 0) {
+  message("These columns are missing and will be skipped: ",
+          paste(missing_cols, collapse = ", "))
+}
+
+base_network_clean <- base_network_enriched %>%
+  dplyr::select(dplyr::any_of(keep_cols)) %>%
+  dplyr::mutate(
+    class_desc = dplyr::case_when(
+      as.character(class) == "0"  ~ "Navy Yard",
+      as.character(class) == "1"  ~ "Expressways",
+      as.character(class) == "2"  ~ "Major Arterial",
+      as.character(class) == "3"  ~ "Minor Arterial",
+      as.character(class) == "4"  ~ "Collector",
+      as.character(class) == "5"  ~ "Local",
+      as.character(class) == "6"  ~ "Driveway",
+      as.character(class) == "9"  ~ "Low Speed Ramps",
+      as.character(class) == "10" ~ "High Speed Ramps",
+      as.character(class) == "12" ~ "Non Travable",
+      as.character(class) == "14" ~ "City Boundary",
+      as.character(class) == "15" ~ "Walking Connector",
+      as.character(class) == "18" ~ "Traffic Controlled Crosswalks",
+      TRUE ~ NA_character_
+    ),
+    fhwa_func_desc = dplyr::case_when(
+      as.character(fhwa_func) == "1" ~ "Interstate",
+      as.character(fhwa_func) == "2" ~ "Principal Arterial – Other Freeways and Expressways",
+      as.character(fhwa_func) == "3" ~ "Principal Arterial – Other",
+      as.character(fhwa_func) == "4" ~ "Minor Arterial",
+      as.character(fhwa_func) == "5" ~ "Major Collector",
+      as.character(fhwa_func) == "6" ~ "Minor Collector",
+      as.character(fhwa_func) == "7" ~ "Local",
+      TRUE ~ NA_character_
+    ),
+    juris_desc = dplyr::case_when(
+      as.character(juris) == "1" ~ "State Owned",
+      as.character(juris) == "2" ~ "Turnpike",
+      as.character(juris) == "3" ~ "Other Agency",
+      as.character(juris) == "4" ~ "Non-State Non-Federal Aid",
+      as.character(juris) == "5" ~ "Non-State Federal Aid",
+      as.character(juris) == "6" ~ "Toll Bridges",
+      TRUE ~ NA_character_
+    ),
+    maint_func_desc = dplyr::case_when(
+      as.character(maint_func) == "A" ~ "Interstate Highway",
+      as.character(maint_func) == "B" ~ "Other Expressways and Principal Arterial Highways",
+      as.character(maint_func) == "C" ~ "Minor Arterial Highways",
+      as.character(maint_func) == "D" ~ "Collector Highways",
+      as.character(maint_func) == "E" ~ "Local Access Highways",
+      as.character(maint_func) == "F" ~ "Interchange Ramps",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  dplyr::relocate(class_desc, .after = class) %>%
+  dplyr::relocate(fhwa_func_desc, .after = fhwa_func) %>%
+  dplyr::relocate(juris_desc, .after = juris) %>%
+  dplyr::relocate(maint_func_desc, .after = maint_func)
+
+
+```
+```{r}
+# 读dvrpc的arterial typologies数据
+library(boxr)
+library(sf)
+library(dplyr)
+library(purrr)
+
+folder_id <- "372767626831"
+
+tmp_dir <- file.path(tempdir(), "typologies_updated")
+dir.create(tmp_dir, showWarnings = FALSE)
+
+files_in_box <- box_ls(dir_id = folder_id) %>%
+  as.data.frame()
+
+shape_parts <- files_in_box %>%
+  dplyr::filter(grepl("^typologies_updated_\\.(shp|dbf|shx|prj|cpg)$", name))
+
+purrr::walk(shape_parts$id, ~ box_dl(file_id = .x, local_dir = tmp_dir))
+
+arterial <- sf::st_read(file.path(tmp_dir, "typologies_updated_.shp"))
+
+glimpse(arterial)
+```
+```{r}
+library(sf)
+library(dplyr)
+library(leaflet)
+
+base_web <- st_transform(base_network_clean, 4326)
+arterial_web <- st_transform(arterial, 4326)
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolylines(data = base_web, color = "green", weight = 1, opacity = 0.5, group = "base_network_clean") %>%
+  addPolylines(data = arterial_web, color = "red", weight = 2, opacity = 0.9, group = "arterial") %>%
+  addLayersControl(
+    overlayGroups = c("base_network_clean", "arterial"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+```
+
+```{r}
+# join dvrpc的arterial数据
+library(sf)
+library(dplyr)
+
+# 1. 统一 CRS
+arterial2 <- st_transform(arterial, st_crs(base_network_clean))
+
+# 2. 给 base 加唯一 id
+base0 <- base_network_clean %>%
+  mutate(base_rowid = row_number())
+
+# 3. 只保留要 join 的 arterial 字段
+arterial_keep <- arterial2 %>%
+  select(TYPOLOGY__, DIV_RDWY, NEW_WID, NEW_LANES, REV_LU, geometry)
+
+# 4. 给 arterial 做 buffer，圈出“可能属于 arterial 的 base 路段”
+# 这里先试 50 ft，可改成 30 / 75 / 100
+arterial_buf <- st_buffer(arterial_keep, dist = 50)
+
+# 5. 找到所有落在 arterial buffer 内的 base segments
+candidate_idx <- st_intersects(base0, st_union(arterial_buf), sparse = FALSE)[, 1]
+
+base_candidate <- base0 %>%
+  filter(candidate_idx)
+
+# 6. 只对候选 base 做最近邻匹配
+nearest_id <- st_nearest_feature(base_candidate, arterial_keep)
+
+dist_vec <- st_distance(
+  st_geometry(base_candidate),
+  st_geometry(arterial_keep[nearest_id, ]),
+  by_element = TRUE
+)
+
+matched_candidate <- base_candidate %>%
+  mutate(
+    dist_to_arterial = as.numeric(dist_vec),
+    TYPOLOGY__ = arterial_keep$TYPOLOGY__[nearest_id],
+    DIV_RDWY   = arterial_keep$DIV_RDWY[nearest_id],
+    NEW_WID    = arterial_keep$NEW_WID[nearest_id],
+    NEW_LANES  = arterial_keep$NEW_LANES[nearest_id],
+    REV_LU     = arterial_keep$REV_LU[nearest_id]
+  )
+
+# 7. 把匹配结果写回完整 base_network_clean
+base_network_clean <- base0 %>%
+  left_join(
+    matched_candidate %>%
+      st_drop_geometry() %>%
+      select(base_rowid, TYPOLOGY__, DIV_RDWY, NEW_WID, NEW_LANES, REV_LU, dist_to_arterial),
+    by = "base_rowid"
+  ) %>%
+  select(-base_rowid)
+```
+```{r}
+library(dplyr)
+library(sf)
+
+check_fhwa <- base_network_clean_joined %>%
+  st_drop_geometry() %>%
+  mutate(
+    is_arterial_fhwa = fhwa_func %in% c(2, 3, 4),
+    has_typology = !is.na(TYPOLOGY__)
+  )
+
+# 比例对照
+summary_fhwa <- check_fhwa %>%
+  summarise(
+    arterial_fhwa_pct = mean(is_arterial_fhwa, na.rm = TRUE) * 100,
+    non_arterial_fhwa_pct = mean(!is_arterial_fhwa, na.rm = TRUE) * 100,
+    typology_na_pct = mean(!has_typology, na.rm = TRUE) * 100,
+    typology_match_pct = mean(has_typology, na.rm = TRUE) * 100
+  )
+
+summary_fhwa
+
+# 交叉表
+cross_fhwa <- check_fhwa %>%
+  count(is_arterial_fhwa, has_typology) %>%
+  group_by(is_arterial_fhwa) %>%
+  mutate(
+    pct_within_group = n / sum(n) * 100
+  ) %>%
+  ungroup()
+
+cross_fhwa
+
+# 每组匹配率
+match_rate_fhwa <- check_fhwa %>%
+  group_by(is_arterial_fhwa) %>%
+  summarise(
+    n = n(),
+    typology_match_rate = mean(has_typology, na.rm = TRUE) * 100,
+    typology_na_rate = mean(!has_typology, na.rm = TRUE) * 100
+  )
+
+match_rate_fhwa
+```
+means有很多不属于arterial的路也被附上了arterial的属性
+
+```{r}
+library(dplyr)
+library(sf)
+
+check_compare <- base_network_clean_joined %>%
+  st_drop_geometry() %>%
+  mutate(
+    has_typology = !is.na(TYPOLOGY__),
+    arterial_fhwa_234 = fhwa_func %in% c(2, 3, 4),
+    arterial_class_23 = class %in% c(2, 3),
+    arterial_class_123 = class %in% c(1, 2, 3),
+    arterial_class_1234 = class %in% c(1, 2, 3, 4)
+  )
+
+compare_result <- bind_rows(
+  check_compare %>%
+    group_by(group = arterial_fhwa_234) %>%
+    summarise(
+      rule = "fhwa 2,3,4",
+      n = n(),
+      typology_match_rate = mean(has_typology) * 100,
+      .groups = "drop"
+    ) %>%
+    mutate(group = if_else(group, "inside", "outside")),
+
+  check_compare %>%
+    group_by(group = arterial_class_23) %>%
+    summarise(
+      rule = "class 2,3",
+      n = n(),
+      typology_match_rate = mean(has_typology) * 100,
+      .groups = "drop"
+    ) %>%
+    mutate(group = if_else(group, "inside", "outside")),
+
+  check_compare %>%
+    group_by(group = arterial_class_123) %>%
+    summarise(
+      rule = "class 1,2,3",
+      n = n(),
+      typology_match_rate = mean(has_typology) * 100,
+      .groups = "drop"
+    ) %>%
+    mutate(group = if_else(group, "inside", "outside")),
+
+  check_compare %>%
+    group_by(group = arterial_class_1234) %>%
+    summarise(
+      rule = "class 1,2,3,4",
+      n = n(),
+      typology_match_rate = mean(has_typology) * 100,
+      .groups = "drop"
+    ) %>%
+    mutate(group = if_else(group, "inside", "outside"))
+)
+
+compare_result
+```
+发现新的join规则，只在fhwa_func %in% c(2, 3, 4) & class %in% c(2, 3)的路段中匹配arterial
+
+```{r}
+library(sf)
+library(dplyr)
+
+# 1. 统一坐标系
+arterial2 <- st_transform(arterial, st_crs(base_network_clean))
+
+# 2. 给 base 加唯一 id，并定义严格的 arterial 候选条件
+base0 <- base_network_clean %>%
+  mutate(
+    base_rowid = row_number(),
+    is_arterial_candidate = fhwa_func %in% c(2, 3, 4) & class %in% c(1, 2, 3)
+  )
+
+# 3. 只保留要 join 的 arterial 字段
+arterial_keep <- arterial2 %>%
+  select(COMB_ID, TYPOLOGY__, DIV_RDWY, NEW_WID, NEW_LANES, REV_LU, geometry)
+
+# 4. 给 arterial 做 buffer
+# 这里先试 50 ft；如果太严可以改成 35 ft
+arterial_buf <- st_buffer(arterial_keep, dist = 50)
+
+# 5. 只保留 arterial 候选 base
+base_candidate <- base0 %>%
+  filter(is_arterial_candidate)
+
+# 6. 找出落在 arterial buffer 内的候选 base
+candidate_hit <- st_intersects(base_candidate, st_union(arterial_buf), sparse = FALSE)[, 1]
+
+base_candidate_hit <- base_candidate %>%
+  filter(candidate_hit)
+
+# 7. 对这些候选 base 做最近邻匹配
+nearest_id <- st_nearest_feature(base_candidate_hit, arterial_keep)
+
+dist_vec <- st_distance(
+  st_geometry(base_candidate_hit),
+  st_geometry(arterial_keep[nearest_id, ]),
+  by_element = TRUE
+)
+
+# 8. 把 arterial 字段赋给这些候选 base
+matched_candidate <- base_candidate_hit %>%
+  mutate(
+    matched_comb_id = arterial_keep$COMB_ID[nearest_id],
+    dist_to_arterial = as.numeric(dist_vec),
+    TYPOLOGY__ = arterial_keep$TYPOLOGY__[nearest_id],
+    DIV_RDWY   = arterial_keep$DIV_RDWY[nearest_id],
+    NEW_WID    = arterial_keep$NEW_WID[nearest_id],
+    NEW_LANES  = arterial_keep$NEW_LANES[nearest_id],
+    REV_LU     = arterial_keep$REV_LU[nearest_id]
+  )
+
+# 9. 写回完整的 base_network_clean
+base_network_clean <- base0 %>%
+  select(-any_of(c(
+    "matched_comb_id", "TYPOLOGY__", "DIV_RDWY", "NEW_WID", "NEW_LANES", "REV_LU", "dist_to_arterial"
+  ))) %>%
+  left_join(
+    matched_candidate %>%
+      st_drop_geometry() %>%
+      select(
+        base_rowid,
+        matched_comb_id,
+        TYPOLOGY__,
+        DIV_RDWY,
+        NEW_WID,
+        NEW_LANES,
+        REV_LU,
+        dist_to_arterial
+      ),
+    by = "base_rowid"
+  ) %>%
+  select(-base_rowid, -is_arterial_candidate)
+```
+```{r}
+base_network_clean %>%
+  st_drop_geometry() %>%
+  summarise(
+    n_total = n(),
+    n_joined = sum(!is.na(TYPOLOGY__)),
+    join_rate = mean(!is.na(TYPOLOGY__)) * 100
+  )
+
+base_network_clean %>%
+  st_drop_geometry() %>%
+  mutate(
+    is_arterial_fhwa = fhwa_func %in% c(2, 3, 4),
+    has_typology = !is.na(TYPOLOGY__)
+  ) %>%
+  count(is_arterial_fhwa, has_typology) %>%
+  group_by(is_arterial_fhwa) %>%
+  mutate(pct_within_group = n / sum(n) * 100) %>%
+  ungroup()
+```
+
+
+```{r}
+# 检查原字段和新说明字段的缺失值比例
+na_check <- tibble::tibble(
+  original_var = c("class", "fhwa_func", "juris", "maint_func"),
+  desc_var     = c("class_desc", "fhwa_func_desc", "juris_desc", "maint_func_desc")
+) %>%
+  dplyr::rowwise() %>%
+  dplyr::mutate(
+    original_na_n = sum(is.na(base_network_clean[[original_var]])),
+    original_na_pct = mean(is.na(base_network_clean[[original_var]])) * 100,
+    desc_na_n = sum(is.na(base_network_clean[[desc_var]])),
+    desc_na_pct = mean(is.na(base_network_clean[[desc_var]])) * 100
+  ) %>%
+  dplyr::ungroup()
+
+na_check
+```
+
+class 列里有 20 条记录 的取值是 13
+但你的 class_desc 映射表里 没有给 13 写对应文字
+
+fhwa_func 列里有 10 条记录 的取值是 0
+但你的 fhwa_func_desc 映射表只写了 1–7
+
+```{r}
+# 列出未映射上的原始取值
+base_network_clean %>%
+  dplyr::filter(!is.na(class) & is.na(class_desc)) %>%
+  dplyr::count(class, sort = TRUE)
+
+base_network_clean %>%
+  dplyr::filter(!is.na(fhwa_func) & is.na(fhwa_func_desc)) %>%
+  dplyr::count(fhwa_func, sort = TRUE)
+
+base_network_clean %>%
+  dplyr::filter(!is.na(juris) & is.na(juris_desc)) %>%
+  dplyr::count(juris, sort = TRUE)
+
+base_network_clean %>%
+  dplyr::filter(!is.na(maint_func) & is.na(maint_func_desc)) %>%
+  dplyr::count(maint_func, sort = TRUE)
+```
+
+```{r}
+# 2) 保存为新的 rds
+tmp_path_clean <- file.path(tempdir(), "base_network_clean.rds")
+saveRDS(base_network_clean, tmp_path_clean)
+
+# 3) 上传到同一个 Box 文件夹
+box_ul(tmp_path_clean, dir_id = target_folder_id)
+```
+
+判断一个segment是不是路口到路口
+```{r}
+# 在全网算 node degree
+library(dplyr)
+library(tidyr)
+library(sf)
+library(scales)
+
+# 用全网 centerline 算 node degree（更准确）
+node_degree <- center_t %>%
+  st_drop_geometry() %>%
+  distinct(seg_id, fnode, tnode) %>%
+  pivot_longer(cols = c(fnode, tnode), values_to = "node_id") %>%
+  filter(!is.na(node_id)) %>%
+  distinct(seg_id, node_id) %>%
+  count(node_id, name = "degree")
+```
+
+```{r}
+# 把两端 degree 贴到 baseline_network_enriched 并做“路口到路口”判定
+baseline_deg <- base_network_enriched %>%
+  left_join(node_degree %>% transmute(fnode = node_id, degree_from = degree), by = "fnode") %>%
+  left_join(node_degree %>% transmute(tnode = node_id, degree_to   = degree), by = "tnode") %>%
+  mutate(
+    is_i2i = (degree_from >= 3) & (degree_to >= 3),
+    end_type = case_when(
+      degree_from >= 3 & degree_to >= 3 ~ "I2I (both ends >=3)",
+      (degree_from >= 3 & degree_to < 3) | (degree_from < 3 & degree_to >= 3) ~ "mixed (one end >=3)",
+      degree_from < 3 & degree_to < 3 ~ "non-I2I (both ends <3)",
+      TRUE ~ "unknown"
+    )
+  )
+```
+
+```{r}
+# intersection-to-intersection占比
+# is_i2i = TRUE 表示：fnode 和 tnode 的 degree 都 ≥ 3 → 这条段很可能是“路口到路口”
+# is_i2i = FALSE 表示：至少有一端 degree < 3
+
+baseline_deg %>%
+  st_drop_geometry() %>%
+  count(is_i2i) %>%
+  mutate(pct = percent(n / sum(n), accuracy = 0.1))
+```
+```{r}
+baseline_deg %>%
+  st_drop_geometry() %>%
+  count(end_type) %>%
+  mutate(pct = percent(n / sum(n), accuracy = 0.1)) %>%
+  arrange(desc(n))
+```
+```{r}
+baseline_deg %>%
+  st_drop_geometry() %>%
+  count(degree_from, degree_to) %>%
+  arrange(desc(n)) %>%
+  mutate(pct = percent(n / sum(n), accuracy = 0.1))
+```
+```{r}
+library(dplyr)
+library(tidyr)
+library(sf)
+library(mapview)
+
+# 1) 先准备 node_degree：优先用全量 centerline 来算（避免子网边界导致 degree 偏小）
+if (exists("center")) {
+  nodes_src <- center
+} else {
+  # 如果你没有 center，就只能用最终网来算（注意 degree 会偏保守）
+  nodes_src <- baseline_network_enriched
+}
+
+node_degree <- nodes_src %>%
+  st_drop_geometry() %>%
+  distinct(seg_id, fnode, tnode) %>%
+  pivot_longer(cols = c(fnode, tnode), values_to = "node_id") %>%
+  filter(!is.na(node_id)) %>%
+  distinct(seg_id, node_id) %>%
+  count(node_id, name = "degree")
+
+# 2) 把两端 degree join 回最终网，并生成是否满足“两端都>=3”的标记
+baseline_deg <- base_network_enriched %>%
+  left_join(node_degree %>% transmute(fnode = node_id, degree_from = degree), by = "fnode") %>%
+  left_join(node_degree %>% transmute(tnode = node_id, degree_to   = degree), by = "tnode") %>%
+  mutate(
+    is_i2i = (degree_from >= 3) & (degree_to >= 3),
+    fail_reason = case_when(
+      is.na(degree_from) | is.na(degree_to) ~ "Missing degree (check nodes / join)",
+      degree_from < 3 & degree_to < 3 ~ "Both ends < 3",
+      degree_from < 3 & degree_to >= 3 ~ "From end < 3",
+      degree_from >= 3 & degree_to < 3 ~ "To end < 3",
+      TRUE ~ "OK"
+    )
+  )
+
+# 3) 筛出不满足条件的 segments
+bad_seg <- baseline_deg %>%
+  filter(!is_i2i) %>%
+  select(seg_id, degree_from, degree_to, fail_reason, geometry)
+
+# 4) 地图可视化（交互式）
+mapview(bad_seg, zcol = "fail_reason")
+```
+
+```{r}
+library(stringr)
+
+edges <- base_network_enriched %>%
+  st_drop_geometry() %>%
+  transmute(
+    seg_id,
+    fnode, tnode,
+    st_code,            # 如果你觉得 st_code 不稳，可换 combined_s 或 stname
+    oneway
+  ) %>%
+  filter(!is.na(fnode), !is.na(tnode))
+
+# 找反向边：A->B 在表里是否存在 B->A（同 st_code）
+rev_pairs <- edges %>%
+  inner_join(
+    edges,
+    by = c("fnode" = "tnode", "tnode" = "fnode", "st_code" = "st_code"),
+    suffix = c("", "_rev")
+  ) %>%
+  filter(seg_id < seg_id_rev)  # 去掉重复成对
+
+n_total <- nrow(edges)
+n_has_reverse <- nrow(distinct(rev_pairs, seg_id)) * 2  # 成对出现：两边都算“有反向”
+
+cat("Total segments:", n_total, "\n")
+cat("Segments that have a reverse counterpart (approx):", n_has_reverse, "\n")
+cat("Share:", round(n_has_reverse / n_total, 3), "\n")
+```
+```{r}
+library(dplyr)
+library(tidyr)
+library(sf)
+library(leaflet)
+
+# 1) 取出所有参与反向成对的 seg_id（共 6 条）
+ids_to_plot <- unique(c(rev_pairs$seg_id, rev_pairs$seg_id_rev))
+
+# 2) 给每条线标上它属于哪一对（pair_id），并 join 回带几何的数据
+pair_key <- rev_pairs %>%
+  mutate(pair_id = row_number()) %>%
+  select(pair_id, seg_id, seg_id_rev) %>%
+  pivot_longer(cols = c(seg_id, seg_id_rev), values_to = "seg_id") %>%
+  select(pair_id, seg_id)
+
+to_plot <- base_network_enriched %>%
+  filter(seg_id %in% ids_to_plot) %>%
+  left_join(pair_key, by = "seg_id")
+
+# 3) leaflet 需要经纬度坐标：投影到 EPSG:4326
+to_plot_ll <- st_transform(to_plot, 4326)
+
+# 4) 画图：按 pair_id 着色
+pal <- colorFactor(palette = "Set1", domain = to_plot_ll$pair_id)
+
+leaflet(to_plot_ll) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolylines(
+    color = ~pal(pair_id),
+    weight = 5,
+    opacity = 0.9,
+    popup = ~paste0(
+      "<b>seg_id:</b> ", seg_id,
+      "<br><b>pair_id:</b> ", pair_id,
+      "<br><b>st_code:</b> ", st_code,
+      "<br><b>oneway:</b> ", oneway
+    )
+  ) %>%
+  addLegend(
+    "bottomright",
+    pal = pal,
+    values = ~pair_id,
+    title = "Reverse pair"
+  )
+```
+
+✅加dvrpc的数据进roadline，typology, ⁠divided_roadwa, ⁠width,⁠la,s  ⁠REV_LU ⁠TYPOLOGY
+
+✅从centerline加street name
+
+✅从otis的数据加bike lanes年份
+
+✅把路的分类写成单词，加一个field
+
+
+可视化lanes，speed lim，width分布
+
+推荐哪个分类 map/correlation/每个分类的侧重是什么
+把单车道种类分颜色画出来，加上与单车有关的crash的点
+
+
+
+在最终的app里，有一个按钮可以开关bike lanes或者别的变量，看看会发生什么：看otis发的guideline里有什么可以改动的
+```{r}
+library(sf)
+library(dplyr)
+library(leaflet)
+library(htmltools)
+
+# 只保留用于展示的4类道路
+map_net <- base_network_clean %>%
+  filter(class_desc %in% c("Major Arterial", "Minor Arterial", "Collector", "Local")) %>%
+  st_transform(4326) %>%
+  mutate(
+    class_desc = factor(
+      class_desc,
+      levels = c("Major Arterial", "Minor Arterial", "Collector", "Local")
+    ),
+    tooltip_text = paste0(
+      "<b>seg_id:</b> ", seg_id, "<br/>",
+      "<b>class_desc:</b> ", class_desc
+    )
+  )
+
+# 配色
+road_pal <- colorFactor(
+  palette = c(
+    "Major Arterial" = "#F2A12C",
+    "Minor Arterial" = "#EBCB2E",
+    "Collector"      = "#4EC2DD",
+    "Local"          = "#3F7E97"
+  ),
+  domain = map_net$class_desc
+)
+
+leaflet(map_net, options = leafletOptions(zoomControl = TRUE)) %>%
+  addProviderTiles(
+    providers$CartoDB.Positron,
+    options = providerTileOptions(opacity = 0.9)
+  ) %>%
+  addPolylines(
+    color = ~road_pal(class_desc),
+    weight = 1,
+    opacity = 0.95,
+    smoothFactor = 0.5,
+    label = ~lapply(tooltip_text, HTML),
+    labelOptions = labelOptions(
+      direction = "auto",
+      textsize = "13px",
+      style = list(
+        "background-color" = "rgba(255,255,255,0.92)",
+        "border-color" = "#cccccc",
+        "border-radius" = "6px",
+        "padding" = "6px 8px",
+        "box-shadow" = "0 1px 4px rgba(0,0,0,0.2)"
+      )
+    ),
+    highlightOptions = highlightOptions(
+      weight = 5,
+      opacity = 1,
+      bringToFront = TRUE
+    )
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    pal = road_pal,
+    values = ~class_desc,
+    title = "Roadway type",
+    opacity = 1
+  )
+```
 
