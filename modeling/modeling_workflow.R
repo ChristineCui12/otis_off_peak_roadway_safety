@@ -47,9 +47,11 @@ speed <- box_read_rds(2193174265310) %>%
   #             sf::st_drop_geometry() %>% 
   #             select(seg_id, oneway))
 
-# Hand-checked data
-data_checked <- box_read_csv(2190702126891) %>% 
-  mutate(seg_id = as.character(seg_id)) 
+# Hand-checked and added data
+data_checked <- box_read_csv(2205423482212) %>% 
+  mutate(seg_id = as.character(seg_id)) %>% 
+  mutate(wide_shoulder = shoulder_width >= 8) %>% 
+  mutate(width_per_traffic_lane = traffic_lanes_width / lanes)
 
 # Crash data
 crashes <- box_read(2195155235316) %>% 
@@ -114,28 +116,30 @@ network_main <- box_read_rds(2151757279199) %>%
 network_supplementary <- box_read_rds(2175268420062) %>% 
   mutate(traffic_calming = count_calming > 0)
 
-network_bike <- box_read_rds(2178022998565) %>% 
-  # Clean up bike categories
-  mutate(bike_lane_type_simple =
-           case_when(bike_lane_type %in% c("Advisory Bike Lane", "Sharrow") ~ 
-                       "Sharrow",
-                     bike_lane_type %in% c("Bus/Bike Lane", "Painted Bike Lane") ~ 
-                       "Painted",
-                     bike_lane_type %in% c("None", "Unknown") ~ 
-                       "None",
-                     bike_lane_type %in% c("On-Street Separated Bike Lane", "Raised Separated Bike Lane", "Shared Use Sidepath") ~ 
-                       "Separated",
-                     is.na(bike_lane_type) ~ "None",
-                     .default = "CHECK")) %>% 
-  full_join(data_checked %>% 
-              select(seg_id, year, bike_lane_type_checked = bike_lane_type_simple),
-            by = c("seg_id", "year")) %>% 
-  mutate(bike_lane_status = coalesce(bike_lane_type_checked, bike_lane_type_simple)) %>% 
-  # If type is 'None', exclude here and NA in modeling data will be turned into 'None'.
-  # filter: removed 1,348 rows (6%), 19,628 rows remaining
-  filter(bike_lane_status != "None")
-
 network_parcels <- box_read_rds(2178038226815)
+
+# Deprecated by manually-checked data
+
+# network_bike <- box_read_rds(2178022998565) %>% 
+#   # Clean up bike categories
+#   mutate(bike_lane_type_simple =
+#            case_when(bike_lane_type %in% c("Advisory Bike Lane", "Sharrow") ~ 
+#                        "Sharrow",
+#                      bike_lane_type %in% c("Bus/Bike Lane", "Painted Bike Lane") ~ 
+#                        "Painted",
+#                      bike_lane_type %in% c("None", "Unknown") ~ 
+#                        "None",
+#                      bike_lane_type %in% c("On-Street Separated Bike Lane", "Raised Separated Bike Lane", "Shared Use Sidepath") ~ 
+#                        "Separated",
+#                      is.na(bike_lane_type) ~ "None",
+#                      .default = "CHECK")) %>% 
+#   full_join(data_checked %>% 
+#               select(seg_id, year, bike_lane_type_checked = bike_lane_type_simple),
+#             by = c("seg_id", "year")) %>% 
+#   mutate(bike_lane_status = coalesce(bike_lane_type_checked, bike_lane_type_simple)) %>% 
+#   # If type is 'None', exclude here and NA in modeling data will be turned into 'None'.
+#   # filter: removed 1,348 rows (6%), 19,628 rows remaining
+#   filter(bike_lane_status != "None")
 
 # # OSM data (no longer used now that data have been hand-checked)
 # osm_characteristics <- box_read_rds(2174904376082)
@@ -149,6 +153,7 @@ modeling_data <- speed %>%
   mutate(year = year(speed_measurement_date)) %>% 
   select(seg_id, 
          all_speeding_percent,
+         high_speeding_percent,
          volume_total,
          speed_measurement_road,
          year, speed_measurement_month, speed_measurement_day_of_week, speed_measurement_period,
@@ -156,16 +161,26 @@ modeling_data <- speed %>%
          traffic_direction) %>% 
   # Join variable inputs
   left_join(data_checked %>% 
-              select(seg_id, lanes, divided_roadway, parking, sidewalk_status),
+              select(seg_id, 
+                     lanes, 
+                     divided_roadway, 
+                     parking, 
+                     sidewalk_status, 
+                     bike_lane_status = bike_lane_type_simple,
+                     curb_to_curb_width,
+                     traffic_lanes_width,
+                     width_per_traffic_lane,
+                     shoulder_width,
+                     wide_shoulder),
             by = "seg_id") %>% 
   # Make sure to treat lanes not as a continuous variable
   mutate(lanes = as.factor(lanes)) %>% 
-  left_join(crashes %>% 
-              select(seg_id, speed_measurement_period, crashes, ksi_rate),
-            by = c("seg_id", "speed_measurement_period")) %>% 
+  # left_join(crashes %>% 
+  #             select(seg_id, speed_measurement_period, crashes, ksi_rate),
+  #           by = c("seg_id", "speed_measurement_period")) %>% 
   left_join(network_main %>% 
               select(seg_id, 
-                     length, width, 
+                     length, 
                      arterial_type_dvrpc,
                      road_classification_city,
                      road_classification_fhwa),
@@ -173,9 +188,9 @@ modeling_data <- speed %>%
   left_join(network_supplementary %>% 
               select(seg_id, count_transit, traffic_calming, count_intersection_ctrl),
             by = "seg_id") %>% 
-  left_join(network_bike %>% 
-              select(seg_id, year, bike_lane_status),
-            by = c("seg_id", "year")) %>% 
+  # left_join(network_bike %>% 
+  #             select(seg_id, year, bike_lane_status),
+  #           by = c("seg_id", "year")) %>% 
   # Bike lane data are complete, so NA means no lane
   mutate(bike_lane_status = replace_na(bike_lane_status, "None")) %>% 
   # If there is no join, there are 0 properties on that segment
@@ -183,11 +198,9 @@ modeling_data <- speed %>%
               select(seg_id, parcel_density),
             by = "seg_id") %>% 
   mutate(parcel_density = replace_na(parcel_density, 0)) %>% 
-  # # Road width per lane variable
-  # mutate(width_per_lane = width / lanes) %>% 
   select(-c(year))
 
-# box_save_rds(modeling_data, file_name = "modeling_data_v8.rds", dir_id = 372762671750)
+# box_save_rds(modeling_data, file_name = "modeling_data_v9.rds", dir_id = 372762671750)
 
 # Create training/test partition --------------------------------------------------------------
 
@@ -205,78 +218,53 @@ rf_spec <-
   set_engine("ranger", importance = "impurity") %>% 
   set_mode("regression")
 
-# # Placeholder for linear model
-# rf_lm <- linear_reg()
-
 # Specify recipes -----------------------------------------------------------------------------
 
+target_variable <- 
+  c("all_speeding_percent")
+
+minimal_predictors <- 
+  c("speed_measurement_period", 
+    "lanes",
+    "road_classification_city",
+    "volume_total")
+
+full_predictors <- 
+  c("speed_measurement_period", 
+    "lanes",
+    "road_classification_city",
+    "volume_total",         
+    "speed_measurement_month",
+    "speed_measurement_day_of_week",
+    "speed_limit",
+    "traffic_direction",          
+    "divided_roadway",
+    "parking",
+    "sidewalk_status", 
+    "bike_lane_status",
+    "parcel_density",
+    "count_transit",
+    "traffic_calming",
+    "count_intersection_ctrl",
+    "curb_to_curb_width",
+    # "traffic_lanes_width",
+    "width_per_traffic_lane",
+    "wide_shoulder",
+    "length")
+
+# Base recipe with target variable
 recipe_0 <- recipe(modeling_train) %>% 
-  update_role(all_speeding_percent, new_role = "outcome")
+  update_role(all_of(target_variable), 
+              new_role = "outcome")
 
 # Minimal model (RF): City road classification
 recipe_minimal_rf_city <- recipe_0 %>% 
-  update_role(speed_measurement_period, 
-              lanes,
-              road_classification_city,
-              volume_total,
-              new_role = "predictor")
-
-# Minimal model (RF): FHWA road classification
-recipe_minimal_rf_fhwa <- recipe_0 %>% 
-  update_role(speed_measurement_period, 
-              lanes,
-              road_classification_fhwa,
-              volume_total,
+  update_role(all_of(minimal_predictors),
               new_role = "predictor")
 
 # Main model (RF): City road classification
 recipe_main_rf_city <- recipe_0 %>% 
-  update_role(speed_measurement_period, 
-              lanes,
-              road_classification_city,
-              divided_roadway,
-              traffic_direction,
-              speed_measurement_road,            # Fixed effect for road name
-              speed_measurement_month,
-              speed_measurement_day_of_week,
-              speed_limit,
-              volume_total,                      # Total volume for hour measured
-              sidewalk_status, 
-              parking,
-              bike_lane_status,
-              parcel_density,
-              count_transit,
-              traffic_calming,
-              count_intersection_ctrl,
-              length,
-              width,
-              crashes,
-              ksi_rate,
-              new_role = "predictor")
-
-# Main model (RF): FHWA road classification
-recipe_main_rf_fhwa <- recipe_0 %>% 
-  update_role(speed_measurement_period, 
-              lanes,
-              road_classification_fhwa,
-              divided_roadway,
-              traffic_direction,
-              speed_measurement_road,            # Fixed effect for road name
-              speed_measurement_month,
-              speed_measurement_day_of_week,
-              speed_limit,
-              volume_total,                      # Total volume for hour measured
-              sidewalk_status, 
-              parking,
-              bike_lane_status,
-              parcel_density,
-              count_transit,
-              traffic_calming,
-              count_intersection_ctrl,
-              length,
-              width,
-              crashes,
-              ksi_rate,
+  update_role(all_of(full_predictors),
               new_role = "predictor")
 
 # Specify hyperparameter search ---------------------------------------------------------------
@@ -294,9 +282,7 @@ recipe_main_rf_fhwa <- recipe_0 %>%
 
 models <-
   workflow_set(preproc = list(minimal_city = recipe_minimal_rf_city, 
-                              # minimal_fhwa = recipe_minimal_rf_fhwa, 
                               main_city = recipe_main_rf_city),
-                              # main_fhwa = recipe_main_rf_fhwa),
                models = list(rf_spec),
                cross = TRUE)
 
@@ -326,13 +312,13 @@ collect_metrics(model_resamples)
 
 #   wflow_id                 .config              preproc model       .metric .estimator   mean     n  std_err
 #   <chr>                    <chr>                <chr>   <chr>       <chr>   <chr>       <dbl> <int>    <dbl>
-# 1 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.159     10 0.00128 
-# 2 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.215     10 0.00171 
-# 3 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.336     10 0.00967 
+# 1 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.158     10 0.00140 
+# 2 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.214     10 0.00169 
+# 3 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.344     10 0.0107  
 
-# 4 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0522    10 0.000822
-# 5 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0825    10 0.00132 
-# 6 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.905     10 0.00354 
+# 4 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0507    10 0.000779
+# 5 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0805    10 0.00126 
+# 6 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.909     10 0.00329 
 
 # Fit to training data ------------------------------------------------------------------------
 
@@ -360,8 +346,8 @@ best_fit <- fit(best_workflow, modeling_train)
 
 explainer <- explain_tidymodels(
   model  = best_fit,
-  data   = modeling_train %>% select(-all_speeding_percent),  # predictors only
-  y      = modeling_train$all_speeding_percent,
+  data   = modeling_train %>% select(-all_of(target_variable)),
+  y      = modeling_train %>% select(all_of(target_variable)),
   label  = "Random Forest"
 )
 
@@ -373,27 +359,7 @@ vif <- model_parts(explainer = explainer,
                    type = "difference",
                    B = 10,
                    N = NULL,
-                   variables = c("speed_measurement_period", 
-                                 "lanes",
-                                 "road_classification_city",
-                                 "divided_roadway",
-                                 "traffic_direction",
-                                 "speed_measurement_road",            
-                                 "speed_measurement_month",
-                                 "speed_measurement_day_of_week",
-                                 "speed_limit",
-                                 "volume_total",                      
-                                 "sidewalk_status", 
-                                 "parking",
-                                 "bike_lane_status",
-                                 "parcel_density",
-                                 "count_transit",
-                                 "traffic_calming",
-                                 "count_intersection_ctrl",
-                                 "length",
-                                 "width",
-                                 "crashes",
-                                 "ksi_rate"))
+                   variables = full_predictors)
 
 plot(vif)
 
