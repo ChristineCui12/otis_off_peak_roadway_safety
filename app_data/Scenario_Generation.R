@@ -98,9 +98,21 @@ app_data <- modeling_data |>
     target_lanes   = if_else(is.na(delta_lanes), 2L, pmax(1L, lanes + delta_lanes)),
     target_bike    = if_else(is.na(target_bike),    bike_lane_status, target_bike),
     target_parking = if_else(is.na(target_parking), parking,          target_parking),
-    eff_bike_sides = if_else(is.na(bike_sides), 0L, bike_sides),
     
+    # is_oneway must be defined before eff_bike_sides which depends on it
     is_oneway = lanes == 1 & !divided_roadway,
+    
+    # eff_bike_sides: for scenarios with an explicit bike change, use the
+    # scenario's bike_sides. For no-bike-change scenarios (bike_sides = NA),
+    # estimate existing sides: 0 if no/sharrow bike (bike_width returns 0
+    # regardless), 1 if one-way, 2 if two-way. This ensures compute_min_width
+    # and the delta calculation both account for the existing bike infrastructure.
+    eff_bike_sides = case_when(
+      !is.na(bike_sides)                              ~ as.integer(bike_sides),
+      bike_lane_status %in% c("None", "Sharrow")      ~ 0L,
+      is_oneway                                       ~ 1L,
+      TRUE                                            ~ 2L
+    ),
     
     # Precondition checks
     precond_pass = case_when(
@@ -152,32 +164,64 @@ app_data <- modeling_data |>
   filter(precond_pass, width_pass) |>
   
   # Mutate affected columns in place
-  # curb_to_curb_width and shoulder_width are physical constraints — unchanged.
-  # Freed space from lane/parking changes flows into wider travel lanes.
+  # Delta-based approach: start from observed traffic_lanes_width and apply
+  # changes on top. This correctly preserves existing_conditions (all deltas = 0)
+  # and avoids the curb_to_curb reverse-engineering problem (unaccounted space
+  # between lane markings, buffers etc. means curb - bike - parking - shoulder
+  # does not equal the observed traffic_lanes_width).
   mutate(
+    # Save originals before any overwriting
+    orig_lanes           = lanes,
+    orig_width_per_lane  = width_per_traffic_lane,
+    orig_traffic_lanes_w = traffic_lanes_width,
+    orig_parking         = parking,
+    orig_bike            = bike_lane_status,
+    
+    # Estimate existing bike sides: 2 for two-way, 1 for one-way
+    # Does not matter when orig_bike is None/Sharrow (bike_width returns 0)
+    orig_bike_sides_est  = if_else(is_oneway, 1L, 2L),
+    
+    # Width consumed by original bike infrastructure
+    orig_bike_w = bike_width(
+      orig_bike,
+      if_else(orig_bike %in% c("None", "Sharrow"), 0L, orig_bike_sides_est)
+    ),
+    
+    # Width consumed by scenario bike infrastructure
+    new_bike_w  = bike_width(target_bike, eff_bike_sides),
+    
+    # Width consumed by original and scenario parking
+    orig_park_w = parking_width(orig_parking),
+    new_park_w  = parking_width(target_parking),
+    
     # Direct geometry changes
     lanes            = target_lanes,
     bike_lane_status = target_bike,
     parking          = target_parking,
     
-    # Recompute travel lane widths
-    # traffic_lanes_width = curb_to_curb minus bike, parking, and shoulder
-    traffic_lanes_width = curb_to_curb_width
-    - bike_width(target_bike, eff_bike_sides)
-    - parking_width(target_parking)
-    - shoulder_width,
+    # Recompute traffic_lanes_width via deltas from the observed value:
+    #   lane delta:    removing/adding lanes at the original per-lane width
+    #   bike delta:    new bike footprint minus original bike footprint
+    #   parking delta: new parking footprint minus original parking footprint
+    # For existing_conditions all three deltas are 0 so the value is unchanged.
+    traffic_lanes_width = orig_traffic_lanes_w
+    + (target_lanes - orig_lanes) * orig_width_per_lane
+    - (new_bike_w  - orig_bike_w)
+    - (new_park_w  - orig_park_w),
     
     # Average width per travel lane
     width_per_traffic_lane = traffic_lanes_width / target_lanes,
     
-    # wide_shoulder threshold is 8 ft; shoulder_width is unchanged so this
-    # only changes if shoulder_width was already near the boundary
+    # wide_shoulder threshold is 8 ft; shoulder_width is unchanged
     wide_shoulder = shoulder_width >= W_WIDE_SHOULDER
     
   ) |>
   # Drop scenario construction columns — keep original data structure + scenario_name only
   select(-delta_lanes, -target_bike, -target_parking, -bike_sides,
          -eff_bike_sides, -target_lanes, -is_oneway,
+         -orig_lanes, -orig_width_per_lane, -orig_traffic_lanes_w,
+         -orig_parking, -orig_bike, -orig_bike_sides_est,
+         -orig_bike_w, -new_bike_w, -orig_park_w, -new_park_w,
          -precond_pass, -scenario_min_width, -width_pass, -slack_ft)
 
 write_csv(app_data, "app_data.csv")
