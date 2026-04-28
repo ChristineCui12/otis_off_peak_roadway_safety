@@ -1,18 +1,18 @@
-# GENERATE SCENARIO DATA FOR THE APP
+# Code to generate predictions for the app
+# Produces one long table: existing conditions + all feasible scenarios.
 # Retains the full modeling_data structure — only scenario_name is added as
 # a new column. Geometry columns affected by the scenario are mutated in place.
-# Output: app_data
 
 library(tidyverse)
 
-# Load data
+# ── Load data -----------------------------------------------------------------
 
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
 modeling_data <- readRDS("modeling_data_v9.rds") |>
   mutate(lanes = as.integer(as.character(lanes)))
 
-# Width standards (feet, minimums only)
+# ── Width standards (feet, minimums only) -------------------------------------
 # PennDOT DM-2 §18.5.17 | Philadelphia ROW §1.4.2 | FHWA Road Diet Guide
 W_TRANSIT  <- 11   # rightmost lane always transit-standard
 W_TRAVEL   <- 10   # all other through lanes
@@ -44,7 +44,7 @@ compute_min_width <- function(target_lanes, target_bike, target_parking, bike_si
   travel_w + bike_width(target_bike, bike_sides) + parking_width(target_parking)
 }
 
-# Scenario catalog
+# ── Scenario catalog -----------------------------------------------------------
 # delta_lanes:     integer offset from existing lanes (NA = set to 2)
 # target_bike:     proposed bike lane type (NA = keep existing)
 # target_parking:  proposed parking configuration (NA = keep existing)
@@ -83,38 +83,39 @@ scenarios <- tribble(
   "major_road_diet_add_painted_both_sides",     NA_integer_,   "Painted",      NA,               2L,
   "major_road_diet_add_separated_both_sides",   NA_integer_,   "Separated",    NA,               2L,
   # Parking changes
-  "remove_parking_one_side",                    0L,             NA,           "One side",        NA,
+  "remove_parking_one_side",                    0L,             NA,            NA,               NA,
   "remove_parking_both_sides",                  0L,             NA,           "None",            NA,
   "add_parking_one_side",                       0L,             NA,           "One side",        NA,
   "add_parking_both_sides",                     0L,             NA,           "Both sides",      NA,
 )
 
-# Cross all observations x scenarios and apply feasibility
+# ── Cross all observations x scenarios and apply feasibility ------------------
 
 app_data <- modeling_data |>
   cross_join(scenarios) |>
   mutate(
-    # Resolve scenario geometry
+    # ── Resolve scenario geometry ────────────────────────────────────────────
     target_lanes   = if_else(is.na(delta_lanes), 2L, pmax(1L, lanes + delta_lanes)),
     target_bike    = if_else(is.na(target_bike),    bike_lane_status, target_bike),
-    target_parking = if_else(is.na(target_parking), parking,          target_parking),
+    target_parking = case_when(
+      scenario_name == "remove_parking_one_side" & parking == "Both sides" ~ "One side",
+      scenario_name == "remove_parking_one_side" & parking == "One side"   ~ "None",
+      is.na(target_parking)                                                 ~ parking,
+      TRUE                                                                  ~ target_parking
+    ),
     
     # is_oneway must be defined before eff_bike_sides which depends on it
     is_oneway = lanes == 1 & !divided_roadway,
     
-    # eff_bike_sides: for scenarios with an explicit bike change, use the
-    # scenario's bike_sides. For no-bike-change scenarios (bike_sides = NA),
-    # estimate existing sides: 0 if no/sharrow bike (bike_width returns 0
-    # regardless), 1 if one-way, 2 if two-way. This ensures compute_min_width
-    # and the delta calculation both account for the existing bike infrastructure.
+    # eff_bike_sides: explicit scenario sides if specified; otherwise assume
+    # existing bike lane occupies 1 side. 0 for None/Sharrow (no width consumed).
     eff_bike_sides = case_when(
       !is.na(bike_sides)                              ~ as.integer(bike_sides),
       bike_lane_status %in% c("None", "Sharrow")      ~ 0L,
-      is_oneway                                       ~ 1L,
-      TRUE                                            ~ 2L
+      TRUE                                            ~ 1L
     ),
     
-    # Precondition checks
+    # ── Precondition checks ──────────────────────────────────────────────────
     precond_pass = case_when(
       scenario_name == "existing_conditions"                         ~ TRUE,
       
@@ -128,28 +129,28 @@ app_data <- modeling_data |>
       
       scenario_name == "lane_diet"                                    ~ lanes >= 2,
       scenario_name %in% c("lane_diet_add_painted_one_side",
-                           "lane_diet_add_separated_one_side")        ~ lanes >= 2,
+                           "lane_diet_add_separated_one_side")        ~ lanes >= 2 & bike_lane_status %in% c("None", "Sharrow"),
       scenario_name == "lane_diet_upgrade_to_separated_one_side"       ~ lanes >= 2 & bike_lane_status == "Painted",
       scenario_name %in% c("lane_diet_add_painted_both_sides",
-                           "lane_diet_add_separated_both_sides")       ~ lanes >= 2 & !is_oneway,
+                           "lane_diet_add_separated_both_sides")       ~ lanes >= 2 & !is_oneway & bike_lane_status %in% c("None", "Sharrow"),
       scenario_name == "lane_diet_upgrade_to_separated_both_sides"     ~ lanes >= 2 & !is_oneway & bike_lane_status == "Painted",
       scenario_name == "lane_diet_add_parking"                         ~ lanes >= 2 & parking != "Both sides",
       
       scenario_name == "major_road_diet_to_2_lanes"                   ~ lanes >= 4,
       scenario_name %in% c("major_road_diet_add_painted_one_side",
-                           "major_road_diet_add_separated_one_side")   ~ lanes >= 4,
+                           "major_road_diet_add_separated_one_side")   ~ lanes >= 4 & bike_lane_status %in% c("None", "Sharrow"),
       scenario_name %in% c("major_road_diet_add_painted_both_sides",
-                           "major_road_diet_add_separated_both_sides")  ~ lanes >= 4 & !is_oneway,
+                           "major_road_diet_add_separated_both_sides")  ~ lanes >= 4 & !is_oneway & bike_lane_status %in% c("None", "Sharrow"),
       
-      scenario_name == "remove_parking_one_side"                      ~ parking == "Both sides",
-      scenario_name == "remove_parking_both_sides"                    ~ parking != "None",
-      scenario_name %in% c("add_parking_one_side",
-                           "add_parking_both_sides")                  ~ parking != "Both sides",
+      scenario_name == "remove_parking_one_side"                      ~ parking %in% c("Both sides", "One side"),
+      scenario_name == "remove_parking_both_sides"                    ~ parking == "Both sides",
+      scenario_name == "add_parking_one_side"                           ~ parking == "None",
+      scenario_name == "add_parking_both_sides"                        ~ parking != "Both sides",
       
       TRUE ~ FALSE
     ),
     
-    # Width feasibility
+    # ── Width feasibility ────────────────────────────────────────────────────
     scenario_min_width = pmap_dbl(
       list(target_lanes, target_bike, target_parking, eff_bike_sides),
       compute_min_width
@@ -163,7 +164,7 @@ app_data <- modeling_data |>
   ) |>
   filter(precond_pass, width_pass) |>
   
-  # Mutate affected columns in place
+  # ── Mutate affected columns in place ─────────────────────────────────────
   # Delta-based approach: start from observed traffic_lanes_width and apply
   # changes on top. This correctly preserves existing_conditions (all deltas = 0)
   # and avoids the curb_to_curb reverse-engineering problem (unaccounted space
@@ -177,14 +178,11 @@ app_data <- modeling_data |>
     orig_parking         = parking,
     orig_bike            = bike_lane_status,
     
-    # Estimate existing bike sides: 2 for two-way, 1 for one-way
-    # Does not matter when orig_bike is None/Sharrow (bike_width returns 0)
-    orig_bike_sides_est  = if_else(is_oneway, 1L, 2L),
-    
-    # Width consumed by original bike infrastructure
+    # Width consumed by original bike infrastructure.
+    # Assumption: existing bike lane occupies 1 side only. No side count in data.
     orig_bike_w = bike_width(
       orig_bike,
-      if_else(orig_bike %in% c("None", "Sharrow"), 0L, orig_bike_sides_est)
+      if_else(orig_bike %in% c("None", "Sharrow"), 0L, 1L)
     ),
     
     # Width consumed by scenario bike infrastructure
@@ -199,15 +197,19 @@ app_data <- modeling_data |>
     bike_lane_status = target_bike,
     parking          = target_parking,
     
-    # Recompute traffic_lanes_width via deltas from the observed value:
-    #   lane delta:    removing/adding lanes at the original per-lane width
-    #   bike delta:    new bike footprint minus original bike footprint
-    #   parking delta: new parking footprint minus original parking footprint
-    # For existing_conditions all three deltas are 0 so the value is unchanged.
-    traffic_lanes_width = orig_traffic_lanes_w
-    + (target_lanes - orig_lanes) * orig_width_per_lane
-    - (new_bike_w  - orig_bike_w)
-    - (new_park_w  - orig_park_w),
+    # Recompute traffic_lanes_width:
+    # Two cases depending on whether lane count changes:
+    # No lane change: bike/parking delta flows directly to/from traffic lanes.
+    #   Removing bike/parking widens lanes; adding narrows them.
+    # Lane count changes: freed lane space absorbs new bike/parking first.
+    #   Remaining lanes only shrink if additional needs exceed freed space.
+    freed_lane_w = pmax(0, (orig_lanes - target_lanes) * orig_width_per_lane),
+    traffic_lanes_width = if_else(
+      target_lanes == orig_lanes,
+      orig_traffic_lanes_w - (new_bike_w - orig_bike_w) - (new_park_w - orig_park_w),
+      target_lanes * orig_width_per_lane
+      - pmax(0, (new_bike_w - orig_bike_w) + (new_park_w - orig_park_w) - freed_lane_w)
+    ),
     
     # Average width per travel lane
     width_per_traffic_lane = traffic_lanes_width / target_lanes,
@@ -220,8 +222,9 @@ app_data <- modeling_data |>
   select(-delta_lanes, -target_bike, -target_parking, -bike_sides,
          -eff_bike_sides, -target_lanes, -is_oneway,
          -orig_lanes, -orig_width_per_lane, -orig_traffic_lanes_w,
-         -orig_parking, -orig_bike, -orig_bike_sides_est,
+         -orig_parking, -orig_bike,
          -orig_bike_w, -new_bike_w, -orig_park_w, -new_park_w,
+         -freed_lane_w,
          -precond_pass, -scenario_min_width, -width_pass, -slack_ft)
 
-write_csv(app_data, "app_data.csv")
+write_csv(app_data, "model_scenario_predicted_data_draft_v3.csv")
