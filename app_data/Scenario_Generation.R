@@ -218,6 +218,18 @@ app_data <- modeling_data |>
     wide_shoulder = shoulder_width >= W_WIDE_SHOULDER
     
   ) |>
+  # Secondary filter: drop rows where the resulting traffic_lanes_width is below
+  # the minimum viable travel width. This catches cases where the delta formula
+  # produces a narrow or negative result on streets where observed lane widths
+  # are already below standard minimums, even though the curb-width check passed.
+  filter(
+    scenario_name == "existing_conditions" |
+      (
+        traffic_lanes_width >= W_TRANSIT + (target_lanes - 1) * W_TRAVEL &
+          traffic_lanes_width <= curb_to_curb_width
+      )
+  ) |>
+  
   # Drop scenario construction columns — keep original data structure + scenario_name only
   select(-delta_lanes, -target_bike, -target_parking, -bike_sides,
          -eff_bike_sides, -target_lanes, -is_oneway,
@@ -227,4 +239,4 @@ app_data <- modeling_data |>
          -freed_lane_w,
          -precond_pass, -scenario_min_width, -width_pass, -slack_ft)
 
-write_csv(app_data, "model_scenario_predicted_data_draft_v3.csv")
+write_csv(app_data, "model_scenario_predicted_data_draft_v4.csv")
