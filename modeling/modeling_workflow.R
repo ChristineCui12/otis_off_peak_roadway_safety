@@ -86,7 +86,7 @@ crashes <- box_read(2195155235316) %>%
                      period == "d" ~ "Peak (morning)")) %>% 
   mutate(speed_measurement_period =
            fct_relevel(speed_measurement_period,
-                       "Off-peak (night)", "Off-peak (midday)", "Peak (evening)", "Peak (morning)"))
+                       "Off-peak (night)", "Peak (morning)", "Off-peak (midday)", "Peak (evening)"))
 
 # Street network data
 network_main <- box_read_rds(2151757279199) %>% 
@@ -213,9 +213,8 @@ modeling_test <- testing(modeling_split)
 
 # Specify model -------------------------------------------------------------------------------
 
-# mtry = tune(), min_n = tune()
 rf_spec <- 
-  rand_forest() %>% 
+  rand_forest(trees = 500, mtry = tune(), min_n = tune()) %>% 
   set_engine("ranger", importance = "impurity") %>% 
   set_mode("regression")
 
@@ -385,18 +384,23 @@ pdp_speed_measurement_period <-
 
 pdp_speed_measurement_period_plot <- 
   as_tibble(pdp_speed_measurement_period$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "Off-peak (night)", 
+                             "Peak (morning)", 
+                             "Off-peak (midday)", 
+                             "Peak (evening)")) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8, color = "#ff9500") +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by period of day",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by period of day",
+       y = "Predicted speeding %",
        x = "Period of day")
 
 pdp_speed_measurement_period_plot
 
-# ggsave(plot = pdp_speed_measurement_period_plot, filename = "pdp_hour.svg", width = 6, height = 4)
+# ggsave(plot = pdp_speed_measurement_period_plot, filename = "pdp_period.svg", width = 6, height = 4)
 
 pdp_lanes <- 
   model_profile(explainer, 
@@ -411,8 +415,8 @@ pdp_lanes_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by width of roadway for traffic lanes",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by width of roadway for traffic lanes",
+       y = "Predicted speeding %",
        x = "Width of traffic lanes")
 
 pdp_lanes_density <- ggplot(modeling_train, aes(x = traffic_lanes_width)) +
@@ -429,7 +433,7 @@ pdp_lanes_density <- ggplot(modeling_train, aes(x = traffic_lanes_width)) +
 
 pdp_lanes_plot / pdp_lanes_density + plot_layout(heights = c(4, 1))
 
-# ggsave(plot = pdp_lanes_plot, filename = "pdp_lanes.svg", width = 6, height = 4)
+# ggsave(filename = "pdp_lanes.svg", width = 6, height = 4)
 
 pdp_lanes_by_period <- 
   model_profile(explainer, 
@@ -445,8 +449,8 @@ pdp_lanes_by_period_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by width of traffic lanes and time of day",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by width of traffic lanes and time of day",
+       y = "Predicted speeding %",
        x = "Width of traffic lanes",
        color = "Time of day")
 
@@ -468,8 +472,8 @@ pdp_width_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by width of roadway",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by width of roadway",
+       y = "Predicted speeding %",
        x = "Width (ft)")
 
 pdp_width_density <- ggplot(modeling_train, aes(x = curb_to_curb_width)) +
@@ -500,8 +504,8 @@ pdp_width_by_period_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by curb to curb width and time of day",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by curb to curb width and time of day",
+       y = "Predicted speeding %",
        x = "Curb to curb width",
        color = "Time of day")
 
@@ -522,8 +526,8 @@ pdp_lanewidth_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by width per lane",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by width per lane",
+       y = "Predicted speeding %",
        x = "lane width (ft)")
 
 pdp_lanewidth_density <- ggplot(modeling_train, aes(x = width_per_traffic_lane)) +
@@ -554,8 +558,8 @@ pdp_lanewidth_by_period_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by width per lane and time of day",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by width per lane and time of day",
+       y = "Predicted speeding %",
        x = "Width per lane",
        color = "Time of day")
 
@@ -571,13 +575,18 @@ pdp_bikelane <-
 
 pdp_bikelane_plot <- 
   as_tibble(pdp_bikelane$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "Sharrow", 
+                             "Painted", 
+                             "Separated")) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by bike lane status",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by bike lane status",
+       y = "Predicted speeding %",
        x = "Bike lane status")
 
 pdp_bikelane_density <- ggplot(modeling_train, aes(x = bike_lane_status)) +
@@ -594,6 +603,8 @@ pdp_bikelane_density <- ggplot(modeling_train, aes(x = bike_lane_status)) +
 
 pdp_bikelane_plot / pdp_bikelane_density + plot_layout(heights = c(4, 1))
 
+# ggsave(filename = "pdp_bikelanes.svg", width = 6, height = 4)
+
 pdp_bikelane_by_period <- 
   model_profile(explainer, 
                 type      = "partial",   
@@ -603,13 +614,18 @@ pdp_bikelane_by_period <-
 
 pdp_bikelane_by_period_plot <- 
   as_tibble(pdp_bikelane_by_period$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "Sharrow", 
+                             "Painted", 
+                             "Separated")) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8) +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by bikelane status and time of day",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by bikelane status and time of day",
+       y = "Predicted speeding %",
        x = "Bikelane status",
        color = "Time of day")
 
@@ -625,13 +641,17 @@ pdp_sidewalk <-
 
 pdp_sidewalk_plot <- 
   as_tibble(pdp_sidewalk$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "One side", 
+                             "Both sides")) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by sidewalk status",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by sidewalk status",
+       y = "Predicted speeding %",
        x = "Sidewalk status")
 
 pdp_sidewalk_density <- ggplot(modeling_train, aes(x = sidewalk_status)) +
@@ -648,6 +668,8 @@ pdp_sidewalk_density <- ggplot(modeling_train, aes(x = sidewalk_status)) +
 
 pdp_sidewalk_plot / pdp_sidewalk_density + plot_layout(heights = c(4, 1))
 
+# ggsave(filename = "pdp_sidewalk.svg", width = 6, height = 4)
+
 pdp_sidewalk_by_period <- 
   model_profile(explainer, 
                 type      = "partial",   
@@ -657,13 +679,17 @@ pdp_sidewalk_by_period <-
 
 pdp_sidewalk_by_period_plot <- 
   as_tibble(pdp_sidewalk_by_period$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "One side", 
+                             "Both sides")) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8) +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by sidewalk status and time of day",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by sidewalk status and time of day",
+       y = "Predicted speeding %",
        x = "Sidewalk status",
        color = "Time of day")
 
@@ -679,13 +705,17 @@ pdp_parking <-
 
 pdp_parking_plot <- 
   as_tibble(pdp_parking$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "One side", 
+                             "Both sides")) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by parking status",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by parking status",
+       y = "Predicted speeding %",
        x = "Parking status")
 
 pdp_parking_density <- ggplot(modeling_train, aes(x = parking)) +
@@ -702,6 +732,8 @@ pdp_parking_density <- ggplot(modeling_train, aes(x = parking)) +
 
 pdp_parking_plot / pdp_parking_density + plot_layout(heights = c(4, 1))
 
+# ggsave(filename = "pdp_parking.svg", width = 6, height = 4)
+
 pdp_parking_by_period <- 
   model_profile(explainer, 
                 type      = "partial",   
@@ -711,13 +743,17 @@ pdp_parking_by_period <-
 
 pdp_parking_by_period_plot <- 
   as_tibble(pdp_parking_by_period$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "One side", 
+                             "Both sides")) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8) +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by parking status and time of day",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by parking status and time of day",
+       y = "Predicted speeding %",
        x = "Parking status",
        color = "Time of day")
 
@@ -738,8 +774,8 @@ pdp_traffic_calming_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by traffic calming status",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by traffic calming status",
+       y = "Predicted speeding %",
        x = "Traffic calming status")
 
 pdp_traffic_calming_density <- ggplot(modeling_train, aes(x = traffic_calming)) +
@@ -756,6 +792,8 @@ pdp_traffic_calming_density <- ggplot(modeling_train, aes(x = traffic_calming)) 
 
 pdp_traffic_calming_plot / pdp_traffic_calming_density + plot_layout(heights = c(4, 1))
 
+# ggsave(filename = "pdp_traffic_calming.svg", width = 6, height = 4)
+
 pdp_traffic_calming_by_period <- 
   model_profile(explainer, 
                 type      = "partial",   
@@ -770,8 +808,8 @@ pdp_traffic_calming_by_period_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by traffic calming status and time of day",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by traffic calming status and time of day",
+       y = "Predicted speeding %",
        x = "Traffic calming status",
        color = "Time of day")
 
@@ -792,8 +830,8 @@ pdp_length_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by segment length",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by segment length",
+       y = "Predicted speeding %",
        x = "Roadway segment length")
 
 pdp_length_density <- ggplot(modeling_train, aes(x = length)) +
@@ -824,8 +862,8 @@ pdp_length_by_period_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by segment length and time of day",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by segment length and time of day",
+       y = "Predicted speeding %",
        x = "Segment length",
        color = "Time of day")
 
@@ -846,8 +884,8 @@ pdp_road_classification_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by road classification",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by road classification",
+       y = "Predicted speeding %",
        x = "Road classification")
 
 pdp_road_classification_density <- ggplot(modeling_train, aes(x = road_classification_city)) +
@@ -878,14 +916,66 @@ pdp_road_classification_by_period_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by road classification and time of day",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by road classification and time of day",
+       y = "Predicted speeding %",
        x = "Road classification",
        color = "Time of day")
 
 pdp_road_classification_by_period_plot
 
+#
 
+pdp_parcel_density <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "parcel_density",
+                N         = NULL) 
+
+pdp_parcel_density_plot <- 
+  as_tibble(pdp_parcel_density$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by segment parcel density",
+       y = "Predicted speeding %",
+       x = "Roadway segment parcel density")
+
+pdp_parcel_density_density <- ggplot(modeling_train, aes(x = parcel_density)) +
+  geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
+
+pdp_parcel_density_plot / pdp_parcel_density_density + plot_layout(heights = c(4, 1))
+
+pdp_parcel_density_by_period <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "parcel_density",
+                groups    = "speed_measurement_period",
+                N         = NULL)
+
+pdp_parcel_density_by_period_plot <- 
+  as_tibble(pdp_parcel_density_by_period$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by segment parcel density and time of day",
+       y = "Predicted speeding %",
+       x = "Segment parcel density",
+       color = "Time of day")
+
+pdp_parcel_density_by_period_plot
 
 
 
@@ -924,8 +1014,8 @@ pdp_road_classification_by_period_plot
 #                      expand = expansion(mult = c(0, 0.2)),
 #                      labels = label_percent()) +
 #   # scale_color_manual(values = c("#ff9500", "#ffd000", "#00badb", "#156082")) +
-#   labs(title = "Predicted probability of speeding by number of lanes and road type",
-#        y = "Probability of speeding",
+#   labs(title = "Predicted speeding by number of lanes and road type",
+#        y = "Predicted speeding %",
 #        x = "Number of lanes in roadway",
 #        color = "Road type")
 # 
@@ -948,8 +1038,8 @@ pdp_road_classification_by_period_plot
 #                      expand = expansion(mult = c(0, 0.2)),
 #                      labels = label_percent()) +
 #   # scale_color_manual(values = c("#ff9500", "#ffd000", "#00badb", "#156082")) +
-#   labs(title = "Predicted probability of speeding by number of lanes and traffic direction",
-#        y = "Probability of speeding",
+#   labs(title = "Predicted speeding by number of lanes and traffic direction",
+#        y = "Predicted speeding %",
 #        x = "Number of lanes in roadway",
 #        color = "Traffic direction")
 # 
@@ -971,8 +1061,8 @@ pdp_road_classification_by_period_plot
 #   scale_y_continuous(limits = c(0, NA), 
 #                      expand = expansion(mult = c(0, 0.2)),
 #                      labels = label_percent()) +
-#   labs(title = "Predicted probability of speeding by number of lanes and measurement period",
-#        y = "Probability of speeding",
+#   labs(title = "Predicted speeding by number of lanes and measurement period",
+#        y = "Predicted speeding %",
 #        x = "Number of lanes in roadway",
 #        color = "Lane count")
 # 
@@ -994,8 +1084,8 @@ pdp_road_classification_by_period_plot
 # #   scale_y_continuous(limits = c(0, NA), 
 # #                      expand = expansion(mult = c(0, 0.2)),
 # #                      labels = label_percent()) +
-# #   labs(title = "Predicted probability of speeding by number of traffic calming interventions",
-# #        y = "Probability of speeding",
+# #   labs(title = "Predicted speeding by number of traffic calming interventions",
+# #        y = "Predicted speeding %",
 # #        x = "Number of calming interventions")
 # # 
 # # pdp_calming_plot
@@ -1017,8 +1107,8 @@ pdp_road_classification_by_period_plot
 # #   scale_y_continuous(limits = c(0, NA), 
 # #                      expand = expansion(mult = c(0, 0.2)),
 # #                      labels = label_percent()) +
-# #   labs(title = "Predicted probability of speeding by roadway width per lane",
-# #        y = "Probability of speeding",
+# #   labs(title = "Predicted speeding by roadway width per lane",
+# #        y = "Predicted speeding %",
 # #        x = "Width per lane (ft/lane)")
 # # 
 # # pdp_width_per_lane_plot
@@ -1050,8 +1140,8 @@ pdp_road_classification_by_period_plot
 # #                      expand = expansion(mult = c(0, 0.2)),
 # #                      labels = label_percent()) +
 # #   # scale_color_manual(values = c("#ff9500", "#ffd000", "#00badb", "#156082")) +
-# #   labs(title = "Predicted probability of speeding by number of lanes and roadway width",
-# #        y = "Probability of speeding",
+# #   labs(title = "Predicted speeding by number of lanes and roadway width",
+# #        y = "Predicted speeding %",
 # #        x = "Roadway width (ft)",
 # #        color = "Number of")
 # # 
@@ -1059,8 +1149,59 @@ pdp_road_classification_by_period_plot
 
 
 
+# Predict on scenarios ------------------------------------------------------------------------
+
+scenario_data <- box_read_csv(2212097907931) %>% 
+  mutate(across(c(speed_measurement_month, seg_id, lanes), ~as.character(.))) %>% 
+  # mutate: no changes
+  mutate(traffic_lanes_width = if_else(traffic_lanes_width < 8, 8, traffic_lanes_width)) %>% 
+  # mutate: changed 4,742 values (13%) of 'traffic_lanes_width' (0 new NAs)
+  mutate(traffic_lanes_width = round(traffic_lanes_width))
+  
+predictions_scenarios <- predict(best_fit, new_data = scenario_data, type = "numeric")
+
+predicted_scenarios_data <- bind_cols(scenario_data, predictions_scenarios) %>% 
+  rename(predicted_speeding_percent = .pred) %>% 
+  relocate(predicted_speeding_percent, .after = seg_id) %>% 
+  # Aggregate across measurement days
+  group_by(pick(c("seg_id",
+                  "speed_measurement_road",
+                  "speed_measurement_period",
+                  "speed_limit", "traffic_direction", "lanes", "divided_roadway",
+                  "parking", "sidewalk_status", "bike_lane_status", "curb_to_curb_width",
+                  "traffic_lanes_width", "width_per_traffic_lane", "shoulder_width",
+                  "wide_shoulder", "crashes", "ksi_rate", "length", "arterial_type_dvrpc",
+                  "road_classification_city", "road_classification_fhwa", "count_transit",
+                  "traffic_calming", "count_intersection_ctrl", "parcel_density",
+                  "scenario_name"))) %>%
+  summarize(predicted_speeding_percent = mean(predicted_speeding_percent, na.rm = TRUE),
+            all_speeding_percent = mean(all_speeding_percent, na.rm = TRUE),
+            high_speeding_percent = mean(high_speeding_percent, na.rm = TRUE)) %>% 
+  # Prepare for output
+  mutate(all_speeding_percent = 
+           if_else(scenario_name == "existing_conditions", all_speeding_percent, NA)) %>% 
+  mutate(high_speeding_percent = 
+           if_else(scenario_name == "existing_conditions", high_speeding_percent, NA)) %>% 
+  # Add geospatial
+  left_join(centerlines_geometry %>% select(seg_id)) %>% 
+  st_as_sf(crs = "EPSG:2272") %>% 
+  arrange(seg_id, speed_measurement_period, scenario_name)
+
+# predicted_scenarios_data %>% distinct(seg_id, speed_measurement_period, scenario_name) %>% nrow()
+
+# st_write(predicted_scenarios_data, "model_scenario_predicted_data_draft_v3.geojson")
+# write_csv(predicted_scenarios_data %>% st_drop_geometry(), "model_scenario_predicted_data_draft_v3.csv")
 
 
 
+# old_predicted_data <- read_rds("/Users/chkim/Library/CloudStorage/Box-Box/Phila_OTIS/data/modeling/model_predicted_data_draft.rds")
+# old_scenario_predicted_data <- read_csv("/Users/chkim/Library/CloudStorage/Box-Box/Phila_OTIS/data/modeling/scenarios/model_scenario_predicted_data_draft_v2.csv")
 
 
+# scenario_data_compare <- scenario_data %>%
+#   filter(scenario_name == "existing_conditions") %>%
+#   select(-scenario_name)
+# 
+# waldo::compare(modeling_data %>% select(traffic_lanes_width),
+#                scenario_data_compare %>% select(traffic_lanes_width),
+#                max_diffs = Inf)
