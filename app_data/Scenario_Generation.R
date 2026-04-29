@@ -196,6 +196,7 @@ app_data <- modeling_data |>
     lanes            = target_lanes,
     bike_lane_status = target_bike,
     parking          = target_parking,
+    traffic_calming  = if_else(scenario_name == "add_traffic_calming", TRUE, traffic_calming),
     
     # Recompute traffic_lanes_width:
     # Two cases depending on whether lane count changes:
@@ -239,4 +240,4 @@ app_data <- modeling_data |>
          -freed_lane_w,
          -precond_pass, -scenario_min_width, -width_pass, -slack_ft)
 
-write_csv(app_data, "model_scenario_predicted_data_draft_v4.csv")
+write_csv(app_data, "model_scenario_predicted_data_draft_v5.csv")
