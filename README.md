@@ -102,14 +102,31 @@ All raw data are stored in a shared Box repository and loaded via the `boxr` API
 
 ## Team
 
-**MUSA 801 Practicum — Spring 2026**
-Weitzman School of Design, University of Pennsylvania
+**MUSA 801 Practicum — Spring 2026 · Weitzman School of Design, University of Pennsylvania**
 
-| Name | Role |
-|---|---|
-| Chi-Hyun Kim | Web application, modeling |
-| Kavana Raju | Crash analysis, data wrangling |
-| Demi Yang | Network construction, road geometry |
-| Christine Cui | Feature engineering, traffic calming, scenario design |
+<table>
+  <tr>
+    <td align="center" width="25%">
+      <b>Kavana Raju</b><br>
+      Project Manager<br>
+      <sub>MCP '26</sub>
+    </td>
+    <td align="center" width="25%">
+      <b>Christine Cui</b><br>
+      GitHub and R Lead<br>
+      <sub>MUSA '26</sub>
+    </td>
+    <td align="center" width="25%">
+      <b>Demi Yang</b><br>
+      Application Lead<br>
+      <sub>MUSA '26</sub>
+    </td>
+    <td align="center" width="25%">
+      <b>Chi-Hyun Kim</b><br>
+      Modelling Lead<br>
+      <sub>MUSA '26</sub>
+    </td>
+  </tr>
+</table>
 
 **Client:** Office of Transportation and Infrastructure Systems (OTIS), City of Philadelphia
