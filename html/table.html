@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Table | 24h Roadway Safety Explorer | Philadelphia</title>
+  <link rel="icon" type="image/png" href="../assets/icon.png" />
+  <link rel="apple-touch-icon" href="../assets/icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/main.css" />
+  <link rel="stylesheet" href="../css/table.css" />
+</head>
+<body class="table-page">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="city-seal" aria-hidden="true">
+        <img src="../assets/icon.png" alt="App logo" width="38" height="38" style="object-fit:contain;display:block;" />
+      </div>
+      <div class="header-title">
+        <div class="header-dept">Peak vs. Off-Peak Speed Risk</div>
+        <h1 class="header-app-name">Roadway Safety Explorer</h1>
+      </div>
+    </div>
+    <nav class="header-nav" aria-label="Main navigation">
+      <a href="landing.html" class="nav-link">Home</a>
+      <a href="index.html"   class="nav-link">Map</a>
+      <a href="table.html"   class="nav-link active">Data Table</a>
+      <a href="about.html"   class="nav-link">About</a>
+    </nav>
+  </header>
+
+  <!-- Main content -->
+  <main class="table-main">
+
+    <!-- Toolbar -->
+    <div class="table-toolbar">
+      <div class="toolbar-left">
+        <h2 class="table-page-title">Road Segment Summary</h2>
+        <span class="table-count" id="table-count">Loading…</span>
+      </div>
+      <div class="toolbar-right">
+
+        <!-- Period selector -->
+        <div class="toolbar-item tbl-period-group" id="tbl-period-group" role="group" aria-label="Time period">
+          <button class="tbl-period-btn active" data-period="night_offpeak" type="button">Night Off-Peak</button>
+          <button class="tbl-period-btn" data-period="morning_peak"   type="button">Morning Peak</button>
+          <button class="tbl-period-btn" data-period="midday_offpeak" type="button">Midday Off-Peak</button>
+          <button class="tbl-period-btn" data-period="evening_peak"   type="button">Evening Peak</button>
+        </div>
+
+        <!-- Search -->
+        <div class="toolbar-item">
+          <input type="search" id="tbl-search" class="toolbar-search" placeholder="Road name or Seg ID…" />
+        </div>
+
+        <!-- Export -->
+        <button class="toolbar-btn" id="tbl-export" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Export CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- Summary stat cards -->
+    <div class="summary-strip" id="summary-strip">
+      <div class="summary-card summary-card--neutral">
+        <div class="summary-num" id="sum-total">—</div>
+        <div class="summary-label">Total Segments</div>
+      </div>
+      <div class="summary-card summary-card--red">
+        <div class="summary-num" id="sum-very-high">—</div>
+        <div class="summary-label">≥40% (Very High)</div>
+      </div>
+      <div class="summary-card summary-card--orange">
+        <div class="summary-num" id="sum-high">—</div>
+        <div class="summary-label">30–40% (High)</div>
+      </div>
+      <div class="summary-card summary-card--yellow">
+        <div class="summary-num" id="sum-moderate">—</div>
+        <div class="summary-label">20–30% (Moderate)</div>
+      </div>
+      <div class="summary-card summary-card--green">
+        <div class="summary-num" id="sum-low">—</div>
+        <div class="summary-label">&lt;20% (Lower)</div>
+      </div>
+      <div class="summary-card summary-card--neutral">
+        <div class="summary-num" id="sum-avg-speeding">—</div>
+        <div class="summary-label">Avg Predicted Speeding</div>
+      </div>
+    </div>
+
+    <!-- Data table -->
+    <div class="table-wrapper">
+      <table class="data-table" id="data-table" aria-label="Road segment data">
+        <colgroup>
+          <col style="width: 88px"  />  <!-- Seg ID -->
+          <col style="width: 210px" />  <!-- Road Name -->
+          <col style="width: 130px" />  <!-- Road Class -->
+          <col style="width: 120px" />  <!-- Pred Speeding -->
+          <col style="width: 110px" />  <!-- Avg Speeding -->
+          <col style="width: 80px"  />  <!-- Speed Limit -->
+          <col style="width: 55px"  />  <!-- Lanes -->
+          <col style="width: 80px"  />  <!-- C2C Width -->
+          <col style="width: 65px"  />  <!-- Crashes -->
+          <col style="width: 70px"  />  <!-- KSI Rate -->
+          <col style="width: 90px"  />  <!-- Bike Lane -->
+          <col style="width: 65px"  />  <!-- Calming -->
+          <col style="width: 55px"  />  <!-- Map -->
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="th-sortable" data-col="seg_id">Seg ID <span class="sort-icon">↕</span></th>
+            <th class="th-sortable" data-col="road_name">Road Name <span class="sort-icon">↕</span></th>
+            <th>Road Class</th>
+            <th class="th-num th-sortable" data-col="predicted_speeding">Pred. Speeding <span class="sort-icon">↕</span></th>
+            <th class="th-num th-sortable" data-col="all_speeding">Avg Speeding <span class="sort-icon">↕</span></th>
+            <th class="th-num th-sortable" data-col="speed_limit">Speed Limit <span class="sort-icon">↕</span></th>
+            <th class="th-num th-sortable" data-col="lanes">Lanes <span class="sort-icon">↕</span></th>
+            <th class="th-num th-sortable" data-col="c2c_width">C2C (ft) <span class="sort-icon">↕</span></th>
+            <th class="th-num th-sortable" data-col="crashes">Crashes <span class="sort-icon">↕</span></th>
+            <th class="th-num th-sortable" data-col="ksi_rate">KSI Rate <span class="sort-icon">↕</span></th>
+            <th>Bike Lane</th>
+            <th class="th-num">Calming</th>
+            <th class="th-action">Map</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr><td colspan="13" class="table-loading">Loading segment data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </main>
+
+  <!-- Disclaimer Modal -->
+  <div id="otis-disclaimer-modal" class="otis-modal-overlay">
+    <div class="otis-modal">
+      <div class="otis-modal-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Research Tool — Not an Official Government App
+      </div>
+      <div class="otis-modal-body">
+        <p>This tool is an <strong>academic research prototype</strong> and is <strong>not</strong> an official application of the City of Philadelphia or its Office of Transportation &amp; Infrastructure Systems (OTIS).</p>
+        <p>Data, model predictions, and visualizations are produced for research and educational purposes only. They have not been reviewed or endorsed by the City of Philadelphia, OTIS, or any other government agency, and should not be used as the sole basis for policy or capital investment decisions.</p>
+        <p>By continuing, you acknowledge that this is an independent research tool, not an authoritative government resource.</p>
+      </div>
+      <div class="otis-modal-footer">
+        <button id="otis-disclaimer-ok" class="otis-modal-btn">I Understand — Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/model.js?v=6"></script>
+  <script src="../js/data.js?v=6"></script>
+  <script src="../js/table.js?v=6"></script>
+  <script>
+    document.getElementById('otis-disclaimer-ok').addEventListener('click', function () {
+      document.getElementById('otis-disclaimer-modal').classList.add('hidden');
+    });
+  </script>
+</body>
+</html>
