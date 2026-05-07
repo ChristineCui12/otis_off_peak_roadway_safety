@@ -82,17 +82,21 @@ A web application allows OTIS planners to explore risk and evaluate intervention
 
 ## Data Sources
 
-All raw data are stored in a shared Box repository. See [`DATA_SOURCES.md`](DATA_SOURCES.md) for the complete catalog. Primary sources:
+All raw data are stored in a shared Box repository and loaded via the `boxr` API. See [`DATA_SOURCES.md`](DATA_SOURCES.md) for the complete catalog including Box file IDs.
 
-| Dataset | Source |
-|---|---|
-| Speed & volume data | Philadelphia County Speed CSVs (PennDOT / Box) |
-| Crash records (2020–2024) | PennDOT Statewide / OpenDataPhilly |
-| Street centerlines | OpenDataPhilly |
-| Road geometry | DVRPC Complete Streets / RMS Admin |
-| Bike network | OpenDataPhilly |
-| Traffic calming | PennDOT Open Data |
-| Transit stops | SEPTA |
+| Dataset | Source | Role |
+|---|---|---|
+| Speed & volume data | PennDOT / DVRPC (Box) | **Primary outcome** — % vehicles speeding per segment per period |
+| Crash records (2020–2024) | PennDOT Statewide / OpenDataPhilly | KSI validation; crash rate predictors |
+| Street centerlines | OpenDataPhilly | Base network; spatial join key |
+| Road geometry (RMS Admin) | PennDOT (Box) | Surface width, segment geometry |
+| Road typology (DVRPC Complete Streets) | DVRPC | Lane count, roadway width, divided roadway |
+| Bike network | OpenDataPhilly | `bike_lane_status` — hand-verified into 4 categories |
+| Traffic calming devices | PennDOT Open Data (Box) | `traffic_calming` binary indicator |
+| Intersection controls | OpenDataPhilly | Count of stop signs & signals per segment |
+| Bus stops & transit | SEPTA | `count_transit` — pedestrian activity proxy |
+| Land parcels | OpenDataPhilly | `parcel_density` — land-use activity proxy |
+| OpenStreetMap | `osmdata` R package | Supplemental road attributes (pre-hand-check fallback) |
 
 ---
 
