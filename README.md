@@ -7,13 +7,13 @@ A predictive modeling and planning tool built for the **City of Philadelphia's O
 
 ---
 
-## 🗺️ Live Application
+## Live Application
 
 **[Launch the Roadway Safety Explorer →](https://chihyunkim.github.io/otis_off_peak_roadway_safety/html/landing.html)**
 
 Explore predicted speeding risk across Philadelphia's road network, simulate the effect of road design interventions, and compare outcomes by time of day.
 
-## 📄 Project Report
+## Project Report
 
 **[Read the Full Analysis Report →](https://chihyunkim.github.io/otis_off_peak_roadway_safety/PROJECT_WRITEUP.html)**
 
