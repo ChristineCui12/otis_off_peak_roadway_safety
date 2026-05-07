@@ -113,7 +113,7 @@ All raw data are stored in a shared Box repository and loaded via the `boxr` API
     </td>
     <td align="center" width="25%">
       <b>Christine Cui</b><br>
-      GitHub and R Lead<br>
+      GitHub & R Lead<br>
       <sub>MUSA '26</sub>
     </td>
     <td align="center" width="25%">
