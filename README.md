@@ -47,16 +47,35 @@ A web application allows OTIS planners to explore risk and evaluate intervention
 ## Repository Structure
 
 ```
-├── PROJECT_WRITEUP.Rmd       # Full analysis report (R Markdown source)
-├── PROJECT_WRITEUP.html      # Compiled report (rendered HTML)
+├── PROJECT_WRITEUP.Rmd            # Full analysis report (R Markdown source)
+├── PROJECT_WRITEUP.html           # Compiled report (rendered HTML)
+├── DATA_SOURCES.md                # Data catalog with Box file IDs
+│
 ├── modeling/
-│   └── modeling_workflow.R   # Model training and evaluation pipeline
-├── exploratory_data_analysis/ # EDA notebooks and crash analysis
-├── joins/                    # Spatial join scripts
-├── data_check/               # Data validation scripts
-├── html/                     # Web app pages (served by GitHub Pages)
-├── css/ / js/ / assets/      # Web app styles, logic, and data
-└── DATA_SOURCES.md           # Data catalog and Box file IDs
+│   └── modeling_workflow.R        # Model training, tuning, and evaluation
+│
+├── app_data/
+│   ├── modeling_data_v9.rds       # Final modeling dataset (9,049 obs)
+│   ├── model_scenario_predicted_data_draft_v6.csv
+│   └── Scenario_Generation.R      # Scenario simulation script
+│
+├── exploratory_data_analysis/
+│   ├── Crash_Data_Analysis_Clean.qmd
+│   ├── speed_volume_data_eda.Rmd
+│   └── Supplementary Dataset.Rmd
+│
+├── joins/                         # Spatial join and feature engineering scripts
+├── data_check/                    # Data validation scripts
+│
+├── html/                          # Web app pages (GitHub Pages)
+│   ├── landing.html               # App landing page
+│   ├── index.html                 # Interactive risk map
+│   ├── table.html                 # Segment data table
+│   └── about.html                 # Methodology
+├── css/                           # Web app stylesheets
+├── js/                            # Web app logic
+├── assets/                        # Web app data (GeoJSON, scenario CSV)
+└── images/                        # Report figures and reference images
 ```
 
 ---
