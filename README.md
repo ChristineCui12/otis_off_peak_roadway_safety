@@ -3,7 +3,7 @@
 
 > *"Congestion may contribute to fender benders, but excess capacity might be contributing to catastrophic outcomes."*
 
-A predictive modeling and planning tool built for the **City of Philadelphia's Office of Transportation and Infrastructure Systems (OTIS)**, Office of Multimodal Planning — Spring 2026.
+A predictive modeling and planning tool built for the **City of Philadelphia's Office of Transportation and Infrastructure Systems (OTIS)** — Spring 2026.
 
 ---
 
