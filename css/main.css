@@ -173,12 +173,10 @@ body {
   padding: 7px 10px;
   display: flex;
   align-items: center;
-  opacity: 0.78;
-  transition: background 0.15s, opacity 0.15s;
 }
 
 .nav-link--icon:hover {
-  opacity: 1;
+  color: var(--white);
 }
 
 /* ============================================================
