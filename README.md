@@ -51,30 +51,48 @@ A web application allows OTIS planners to explore risk and evaluate intervention
 ├── PROJECT_WRITEUP.html           # Compiled report (rendered HTML)
 ├── DATA_SOURCES.md                # Data catalog with Box file IDs
 │
+├── landing.html                   # App landing page (GitHub Pages entry)
+├── index.html                     # Interactive risk map
+├── table.html                     # Segment data table
+├── about.html                     # Methodology & team
+├── css/                           # Web app stylesheets
+├── js/                            # Web app logic
+├── assets/                        # Web app GeoJSON and scenario data
+├── images/                        # App screenshots and case study images
+│
 ├── modeling/
 │   └── modeling_workflow.R        # Model training, tuning, and evaluation
 │
+├── data/
+│   ├── model/
+│   │   ├── modeling_data_v9.rds                     # Final modeling dataset (9,049 obs)
+│   │   ├── final_model_fit_v5.rds                   # Trained Random Forest model object
+│   │   ├── model_predicted_data_v5.rds              # Predicted speeding, existing conditions
+│   │   ├── model_scenario_predicted_data_v7.geojson # Scenario simulation outputs
+│   │   ├── model_scenario_predicted_data_v7.csv
+│   │   └── Modeling data source data dictionary.txt
+│   └── processed/
+│       ├── Street_Centerline.RDS                    # Philadelphia street network
+│       ├── street_segment_crash_attributes.csv      # Crash counts and KSI rates by segment
+│       ├── data_additions_complete.csv              # Hand-verified road geometry data
+│       ├── base_network_clean.rds
+│       ├── scenario_input_data_v6.csv
+│       └── segment_parcels.rds
+│
 ├── app_data/
-│   ├── modeling_data_v9.rds       # Final modeling dataset (9,049 obs)
+│   ├── modeling_data_v9.rds
 │   ├── model_scenario_predicted_data_draft_v6.csv
 │   └── Scenario_Generation.R      # Scenario simulation script
 │
 ├── exploratory_data_analysis/
 │   ├── Crash_Data_Analysis_Clean.qmd
 │   ├── speed_volume_data_eda.Rmd
-│   └── Supplementary Dataset.Rmd
+│   ├── Supplementary Dataset.Rmd
+│   ├── Data/                      # Raw data: crash records 2020–2024, street centerlines, RMS Admin
+│   └── road line data/            # Road network GeoJSON (Complete Streets, Bike Network)
 │
 ├── joins/                         # Spatial join and feature engineering scripts
-├── data_check/                    # Data validation scripts
-│
-├── landing.html                   # App landing page (GitHub Pages)
-├── index.html                     # Interactive risk map
-├── table.html                     # Segment data table
-├── about.html                     # Methodology
-├── css/                           # Web app stylesheets
-├── js/                            # Web app logic
-├── assets/                        # Web app data (GeoJSON, scenario CSV)
-└── images/                        # Report figures and reference images
+└── data_check/                    # Data validation scripts
 ```
 
 ---
@@ -83,19 +101,20 @@ A web application allows OTIS planners to explore risk and evaluate intervention
 
 All raw data are stored in a shared Box repository and loaded via the `boxr` API. See [`DATA_SOURCES.md`](DATA_SOURCES.md) for the complete catalog including Box file IDs.
 
-| Dataset | Source | Role |
-|---|---|---|
-| Speed & volume data | PennDOT / DVRPC (Box) | **Primary outcome** — % vehicles speeding per segment per period |
-| Crash records (2020–2024) | PennDOT Statewide / OpenDataPhilly | KSI validation; crash rate predictors |
-| Street centerlines | OpenDataPhilly | Base network; spatial join key |
-| Road geometry (RMS Admin) | PennDOT (Box) | Surface width, segment geometry |
-| Road typology (DVRPC Complete Streets) | DVRPC | Lane count, roadway width, divided roadway |
-| Bike network | OpenDataPhilly | `bike_lane_status` — hand-verified into 4 categories |
-| Traffic calming devices | PennDOT Open Data (Box) | `traffic_calming` binary indicator |
-| Intersection controls | OpenDataPhilly | Count of stop signs & signals per segment |
-| Bus stops & transit | SEPTA | `count_transit` — pedestrian activity proxy |
-| Land parcels | OpenDataPhilly | `parcel_density` — land-use activity proxy |
-| OpenStreetMap | `osmdata` R package | Supplemental road attributes (pre-hand-check fallback) |
+| Dataset | Source | Role | In Repo |
+|---|---|---|---|
+| Speed & volume data | PennDOT / DVRPC (Box) | **Primary outcome** — % vehicles speeding per segment per period | Box only — see [`DATA_SOURCES.md`](DATA_SOURCES.md) |
+| Crash records (2020–2024) | PennDOT Statewide / OpenDataPhilly | KSI validation; crash rate predictors | [`exploratory_data_analysis/Data/`](exploratory_data_analysis/Data) · [`data/processed/street_segment_crash_attributes.csv`](data/processed/street_segment_crash_attributes.csv) |
+| Street centerlines | OpenDataPhilly | Base network; spatial join key | [`exploratory_data_analysis/Data/Street_Centerline/`](exploratory_data_analysis/Data/Street_Centerline) · [`data/processed/Street_Centerline.RDS`](data/processed/Street_Centerline.RDS) |
+| Road geometry (RMS Admin) | PennDOT | Surface width, segment geometry | [`exploratory_data_analysis/Data/RMS_-_ADMIN_-_All/`](exploratory_data_analysis/Data/RMS_-_ADMIN_-_All) |
+| Road typology (DVRPC Complete Streets) | DVRPC | Lane count, roadway width, divided roadway | [`exploratory_data_analysis/road line data/CompleteStreets.geojson`](<exploratory_data_analysis/road line data/CompleteStreets.geojson>) |
+| Bike network | OpenDataPhilly | `bike_lane_status` — hand-verified into 4 categories | [`exploratory_data_analysis/road line data/Bike_Network.geojson`](<exploratory_data_analysis/road line data/Bike_Network.geojson>) |
+| Hand-verified road geometry | Team field check (Google Street View) | Lane widths, parking, sidewalk, bike lane status | [`data/processed/data_additions_complete.csv`](data/processed/data_additions_complete.csv) |
+| Traffic calming devices | PennDOT Open Data (Box) | `traffic_calming` binary indicator | Box only — see [`DATA_SOURCES.md`](DATA_SOURCES.md) |
+| Intersection controls | OpenDataPhilly | Count of stop signs & signals per segment | — |
+| Bus stops & transit | SEPTA | `count_transit` — pedestrian activity proxy | — |
+| Land parcels | OpenDataPhilly | `parcel_density` — land-use activity proxy | [`data/processed/segment_parcels.rds`](data/processed/segment_parcels.rds) |
+| OpenStreetMap | `osmdata` R package | Supplemental road attributes (pre-hand-check fallback) | — |
 
 ---
 
