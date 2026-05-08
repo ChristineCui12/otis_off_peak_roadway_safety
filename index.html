@@ -19,12 +19,7 @@
   <header class="app-header">
     <div class="header-brand">
       <div class="city-seal" aria-hidden="true">
-        <svg viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg" width="38" height="38">
-          <circle cx="22" cy="22" r="20" fill="white" />
-          <text x="22" y="16" text-anchor="middle" font-size="5.5" font-weight="bold" fill="#0f4d90" font-family="serif">CITY OF</text>
-          <text x="22" y="23" text-anchor="middle" font-size="5" font-weight="bold" fill="#0f4d90" font-family="serif">PHILA-</text>
-          <text x="22" y="30" text-anchor="middle" font-size="5" font-weight="bold" fill="#0f4d90" font-family="serif">DELPHIA</text>
-        </svg>
+        <img src="assets/icon.png" alt="App logo" width="38" height="38" style="object-fit:contain;display:block;" />
       </div>
       <div class="header-title">
         <div class="header-dept">Peak vs. Off-Peak Speed Risk</div>
@@ -32,10 +27,10 @@
       </div>
     </div>
     <nav class="header-nav" aria-label="Main navigation">
-      <a href="html/landing.html" class="nav-link">Home</a>
+      <a href="landing.html" class="nav-link">Home</a>
       <a href="index.html"   class="nav-link active">Map</a>
-      <a href="html/table.html"   class="nav-link">Data Table</a>
-      <a href="html/about.html"   class="nav-link">About</a>
+      <a href="table.html"   class="nav-link">Data Table</a>
+      <a href="about.html"   class="nav-link">About</a>
       <a href="https://github.com/chihyunkim/otis_off_peak_roadway_safety" class="nav-link nav-link--icon" target="_blank" rel="noopener" aria-label="GitHub repository">
         <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
       </a>
@@ -99,6 +94,7 @@
           <div class="legend-item"><span class="legend-swatch" style="background:#88c740"></span>10–20%</div>
           <div class="legend-item"><span class="legend-swatch" style="background:#58c04d"></span>&lt;10%</div>
           <div class="legend-item"><span class="legend-swatch" style="background:#c0c0c0"></span>No data</div>
+
         </div>
       </div>
     </div>
@@ -109,6 +105,20 @@
         <path d="M15 15l6 6m-11-4a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/>
       </svg>
       Click a road segment to explore intervention scenarios
+    </div>
+
+    <!-- ── TOUR BANNER ───────────────────────────────────────────────── -->
+    <div class="map-tour-banner hidden" id="map-tour-banner" role="status">
+      <div class="tour-banner-content">
+        <div class="tour-banner-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="tour-banner-text">
+          <div class="tour-banner-title" id="tour-banner-title"></div>
+          <div class="tour-banner-body" id="tour-banner-body"></div>
+        </div>
+        <button class="tour-banner-close" id="tour-banner-close" type="button" aria-label="Dismiss tip">&#x2715;</button>
+      </div>
     </div>
 
     <!-- ── LOADING BANNER ─────────────────────────────────────────── -->
@@ -150,6 +160,7 @@
             <div class="xs-canvas" id="xs-current"></div>
             <div class="xs-legend" id="xs-legend-current"></div>
           </div>
+          <p class="rp-schematic-note">The diagram is a schematic view of the road configuration at the time which speed measurements were made at this location.</p>
           <div class="rp-info-grid" id="rp-info-grid">
             <!-- populated by controls.js -->
           </div>
@@ -159,6 +170,7 @@
         <section class="rp-section rp-section--prediction">
           <div class="rp-section-title">Predicted Speeding Impact</div>
           <p class="rp-section-sub">Predicted speeding % under current design vs. the most effective feasible intervention for this segment.</p>
+          <p class="rp-model-note">Predicted speeding values are model estimates and subject to uncertainty. Treat as directional, not precise.</p>
           <div class="impact-compare">
             <div class="impact-box impact-box--current">
               <div class="impact-box-label">Current Design</div>
@@ -175,6 +187,11 @@
             </div>
           </div>
           <div class="impact-delta" id="impact-delta"></div>
+          <!-- Optimal design notice -->
+          <div class="impact-optimal-notice hidden" id="impact-optimal-notice">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true" style="flex-shrink:0;margin-top:1px"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            Current design is already the model's lowest predicted speeding for this segment. You can still explore individual scenarios below.
+          </div>
           <!-- Best scenario name + cross-section -->
           <div class="impact-best-name" id="impact-best-name"></div>
           <div class="impact-best-xs hidden" id="impact-best-xs">
@@ -237,10 +254,39 @@
 
   </div><!-- /.dashboard-body -->
 
+  <!-- Disclaimer Modal -->
+  <div id="otis-disclaimer-modal" class="otis-modal-overlay">
+    <div class="otis-modal">
+      <div class="otis-modal-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Research Tool — Not an Official Government App
+      </div>
+      <div class="otis-modal-body">
+        <p>This tool is an <strong>academic research prototype</strong> and is <strong>not</strong> an official application of the City of Philadelphia or its Office of Transportation &amp; Infrastructure Systems (OTIS).</p>
+        <p>Data, model predictions, and visualizations are produced for research and educational purposes only. They have not been reviewed or endorsed by the City of Philadelphia, OTIS, or any other government agency, and should not be used as the sole basis for policy or capital investment decisions.</p>
+        <p>By continuing, you acknowledge that this is an independent research tool, not an authoritative government resource.</p>
+      </div>
+      <div class="otis-modal-footer">
+        <button id="otis-disclaimer-ok" class="otis-modal-btn">I Understand — Continue</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="js/model.js?v=4"></script>
-  <script src="js/data.js?v=4"></script>
-  <script src="js/controls.js?v=4"></script>
-  <script src="js/map.js?v=4"></script>
+  <script src="js/model.js?v=6"></script>
+  <script src="js/data.js?v=6"></script>
+  <script src="js/controls.js?v=6"></script>
+  <script src="js/map.js?v=6"></script>
+  <script>
+    document.getElementById('otis-disclaimer-ok').addEventListener('click', function () {
+      document.getElementById('otis-disclaimer-modal').classList.add('hidden');
+      /* Show onboarding tour if requested via URL param */
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var tour = params.get('tour');
+        if (tour && typeof window._showTour === 'function') window._showTour(tour);
+      } catch (e) { /* ignore */ }
+    });
+  </script>
 </body>
 </html>
