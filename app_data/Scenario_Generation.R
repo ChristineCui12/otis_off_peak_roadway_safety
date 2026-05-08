@@ -87,6 +87,8 @@ scenarios <- tribble(
   "remove_parking_both_sides",                  0L,             NA,           "None",            NA,
   "add_parking_one_side",                       0L,             NA,           "One side",        NA,
   "add_parking_both_sides",                     0L,             NA,           "Both sides",      NA,
+  # Traffic calming
+  "add_traffic_calming",                        0L,             NA,            NA,               NA,
 )
 
 # ── Cross all observations x scenarios and apply feasibility ------------------
@@ -147,6 +149,8 @@ app_data <- modeling_data |>
       scenario_name == "add_parking_one_side"                           ~ parking == "None",
       scenario_name == "add_parking_both_sides"                        ~ parking != "Both sides",
       
+      scenario_name == "add_traffic_calming"                           ~ !traffic_calming,
+      
       TRUE ~ FALSE
     ),
     
@@ -156,8 +160,9 @@ app_data <- modeling_data |>
       compute_min_width
     ),
     width_pass = case_when(
-      scenario_name == "existing_conditions" ~ TRUE,
-      TRUE                                   ~ curb_to_curb_width >= scenario_min_width
+      scenario_name %in% c("existing_conditions",
+                           "add_traffic_calming") ~ TRUE,
+      TRUE                                         ~ curb_to_curb_width >= scenario_min_width
     ),
     slack_ft = curb_to_curb_width - scenario_min_width
     
@@ -224,7 +229,7 @@ app_data <- modeling_data |>
   # produces a narrow or negative result on streets where observed lane widths
   # are already below standard minimums, even though the curb-width check passed.
   filter(
-    scenario_name == "existing_conditions" |
+    scenario_name %in% c("existing_conditions", "add_traffic_calming") |
       (
         traffic_lanes_width >= W_TRANSIT + (target_lanes - 1) * W_TRAVEL &
           traffic_lanes_width <= curb_to_curb_width
@@ -240,4 +245,4 @@ app_data <- modeling_data |>
          -freed_lane_w,
          -precond_pass, -scenario_min_width, -width_pass, -slack_ft)
 
-write_csv(app_data, "model_scenario_predicted_data_draft_v5.csv")
+write_csv(app_data, "model_scenario_predicted_data_draft_v6.csv")
