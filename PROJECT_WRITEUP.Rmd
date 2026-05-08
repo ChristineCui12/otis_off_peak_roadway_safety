@@ -217,21 +217,19 @@ Wide arterials and multi-lane collectors, engineered to manage thousands of vehi
 
 ### The Off-Peak Safety Paradox
 
-Philadelphia's Office of Multimodal Planning documented this pattern directly in an analysis of eight multilane arterials on the city's High Injury Network (TESC, 2024). The finding is stark:
+Philadelphia's Office of Multimodal Planning documented this pattern directly in an analysis of eight multilane arterials on the city's High Injury Network (OTIS Office of Multimodal Planning, "Evaluating the Off-Peak Impacts of Designing for Peak Hour Operations," TESC, December 2024; internal report). The finding is stark:
 
 Evening hours (8 PM–3 AM) represent only **29% of the day** and carry just **14% of daily traffic volume** — yet they account for **46% of all pedestrian KSI crashes**. Peak hours (7–10 AM, 3–7 PM), despite representing the same share of time (29%) and three times the traffic share (42%), produce only 26% of KSI crashes. The conclusion is direct: **LOS A — free-flow traffic — is not safe. Excess capacity kills.**
 
 The hourly KSI-to-demand ratio tells the same story at finer resolution: during overnight hours, the KSI share (orange) rises sharply while the traffic share (black) falls — creating the inverse pattern that defines the off-peak paradox. The divergence is most extreme between midnight and 7 AM, when pedestrian KSI rates are 3–5× higher per unit of traffic than during midday hours.
 
-```{r ksi-hourly-intro, echo=FALSE, out.width="100%"}
-knitr::include_graphics(
-  "exploratory_data_analysis/Crash_Data_Analysis_Clean_files/figure-html/hourly-patterns-1.png"
-)
+```{r ksi-hourly-intro, echo=FALSE, out.width="85%", fig.cap="Ped KSI crashes vs. hourly traffic share by hour of day across Philadelphia multilane arterials. Orange = pedestrian KSI share; Black = hourly traffic share (% of AADT). Source: OTIS Office of Multimodal Planning, TESC, December 2024 (internal report)."}
+knitr::include_graphics("images/refs/tesc_p38.png")
 ```
 
 <div class="callout callout-orange">
 *"LOS A is dangerous for vulnerable road users because it allows for unmetered speeding by drivers."*
-<br>— OTIS Office of Multimodal Planning, TESC 2024
+<br>— OTIS Office of Multimodal Planning, *Evaluating the Off-Peak Impacts of Designing for Peak Hour Operations*, TESC, December 2024 (internal report)
 </div>
 
 ### Why Road Design Makes Drivers Speed
@@ -1359,8 +1357,6 @@ features %>%
             label_row_css = "background-color:#e8f0f7; color:#156082; font-weight:600; font-size:13px;") %>%
   pack_rows("Volume", 20, 20,
             label_row_css = "background-color:#e8f0f7; color:#156082; font-weight:600; font-size:13px;") %>%
-  pack_rows("Crash Context", 21, 22,
-            label_row_css = "background-color:#e8f0f7; color:#156082; font-weight:600; font-size:13px;") %>%
   column_spec(1, monospace = TRUE, bold = TRUE, width = "18em") %>%
   column_spec(2, width = "8em", color = "#555") %>%
   column_spec(3, width = "34em")
@@ -1498,6 +1494,8 @@ performance %>%
                notation = "none")
 ```
 
+```{r perf-stat-boxes, echo=FALSE}
+htmltools::HTML('
 <div class="stat-row">
   <div class="stat-box">
     <span class="stat-num">0.920</span>
@@ -1516,6 +1514,8 @@ performance %>%
     <span class="stat-label">Segment-period<br>observations</span>
   </div>
 </div>
+')
+```
 
 An R² of 0.920 means that road characteristics, time of day, and land-use context together explain 92% of the variance in observed speeding rates — leaving only 8% attributable to unobserved, truly stochastic factors. This strongly supports the project's central claim: speeding is not random driver behavior, it is a structurally determined outcome.
 
@@ -1855,6 +1855,8 @@ list(
                notation = "none")
 ```
 
+```{r error-stat-boxes, echo=FALSE}
+htmltools::HTML('
 <div class="stat-row">
   <div class="stat-box">
     <span class="stat-num-orange">0.080</span>
@@ -1873,6 +1875,8 @@ list(
     <span class="stat-label">RMSE off-peak (night)<br><em>vs. 0.046 midday off-peak</em></span>
   </div>
 </div>
+')
+```
 
 Generally, subgroups of data do not show markedly different error levels compared to the dataset as a whole (~7 percentage points RMSE). However, roadways with characteristics conducive to high speeding (Major Arterials, 5+ lanes, off-peak night) are also the hardest to predict. Partly, this is because of underlying heterogeneity in these groups (for example, Major Arterials include both narrow roads like 34th St and wide roads like Columbus Blvd). The model also tends to underestimate night-time speeding along arterials, which often see very high speeding percentage in reality. This is an important limitation of our model because this population of roadways is also the focus of our use case. The low RMSE on traffic-calmed segments (0.025) reflects that these segments form a more homogeneous, predictable subgroup — it should not be read as independent confirmation that traffic calming reduces speeding; that evidence comes from the PDP analysis above.
 

@@ -124,7 +124,7 @@ The following reports informed the project's analytical framing and scenario des
 | Document | Source |
 |---|---|
 | Arterial Typology & Speed Management Framework (2022) | DVRPC |
-| 24-Hour Analysis: Off-Peak Impacts of Peak-Hour Design (2024) | OTIS / TESC |
+| Evaluating the Off-Peak Impacts of Designing for Peak Hour Operations (December 2024) | OTIS Office of Multimodal Planning / TESC (internal report) |
 | Safe Waves: Signal Timing for Speed Management (2024) | Furth et al., Northeastern University |
 | Mental Frameworks Underlying Driver Behavior in Urban Contexts (2021) | Tice et al., University of Central Florida |
 
