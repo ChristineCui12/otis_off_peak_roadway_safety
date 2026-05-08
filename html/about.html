@@ -36,6 +36,9 @@
       <a href="index.html"   class="nav-link">Map</a>
       <a href="table.html"   class="nav-link">Data Table</a>
       <a href="about.html"   class="nav-link active">About</a>
+      <a href="https://github.com/chihyunkim/otis_off_peak_roadway_safety" class="nav-link nav-link--icon" target="_blank" rel="noopener" aria-label="GitHub repository">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
     </nav>
   </header>
 
@@ -58,7 +61,7 @@
           changes could reduce those risks.
         </p>
         <p class="about-hero-sub">
-          
+
           ——This tool was created by
           <a href="https://github.com/kavanaraju" class="about-link about-author-link" target="_blank" rel="noopener">Kavana Raju</a>,
           <a href="https://github.com/ChristineCui12" class="about-link about-author-link" target="_blank" rel="noopener">Christine Cui</a>,
@@ -66,6 +69,27 @@
           and
           <a href="https://github.com/demiyang12" class="about-link about-author-link" target="_blank" rel="noopener">Demi Yang</a>.
         </p>
+        <p class="about-hero-sub about-report-ref">
+          完整的研究报告请查看：<a href="https://chihyunkim.github.io/otis_off_peak_roadway_safety/PROJECT_WRITEUP.html" class="about-link about-report-link" target="_blank" rel="noopener">Project Writeup &rarr;</a>
+        </p>
+      </section>
+
+      <!-- Key Statistics Banner -->
+      <section class="about-stats-banner">
+        <div class="about-stat-item">
+          <div class="about-stat-value">3×</div>
+          <div class="about-stat-label">Off-peak pedestrian KSI concentration ratio — evening hours (8 PM–3 AM) are 14% of daily traffic but produce 46% of pedestrian KSI crashes</div>
+        </div>
+        <div class="about-stat-divider"></div>
+        <div class="about-stat-item">
+          <div class="about-stat-value">0.920</div>
+          <div class="about-stat-label">Model R² — speeding is structurally determined, not random; road design choices explain 92% of variance in observed speeding rates</div>
+        </div>
+        <div class="about-stat-divider"></div>
+        <div class="about-stat-item">
+          <div class="about-stat-value">54.7%</div>
+          <div class="about-stat-label">Of road segments where majority of traffic speeds during off-peak hours are Major Arterials — wide, multi-lane corridors built for peak demand</div>
+        </div>
       </section>
 
       <div class="about-grid">
@@ -364,6 +388,21 @@
               <li>Roadway configurations may have changed since speed measurements were made in 2022-2025. We attempted to capture road characteristics accurate to the time of measurement, but discrepancies may remain.</li>
               <li>Speeding is treated as a binary yes/no outcome for modeling and communication, though different degrees of speeding have different safety implications.</li>
             </ul>
+          </div>
+
+          <div class="about-sidebar-card">
+            <h4 class="sidebar-card-title">Policy Recommendations</h4>
+            <p class="sidebar-text">Based on the model's findings, the research identifies five priority interventions:</p>
+            <ol class="sidebar-list sidebar-list-numbered">
+              <li><strong>Road redesign prioritization.</strong> Wide (&gt;50 ft curb-to-curb), multi-lane (≥4 lanes) undivided arterials with high predicted nighttime speeding and KSI history are strongest candidates for road diet feasibility studies.</li>
+              <li><strong>Traffic calming deployment.</strong> Calmed segments show RMSE of 0.025 vs. 0.052 for uncalmed — physical calming makes speeding predictable and dramatically reduces it.</li>
+              <li><strong>Bike infrastructure as safety investment.</strong> Predicted speeding decreases monotonically from no bike lane through sharrow, painted, and separated — even a painted lane shifts the model's prediction downward.</li>
+              <li><strong>Enforcement targeting.</strong> Model outputs can guide speed camera placement at highest-risk late-night (10 PM–5 AM) segments, particularly on Major Arterials.</li>
+              <li><strong>Monitoring network expansion.</strong> The highest errors occur on Major Arterials and 5+ lane roads — the worst KSI records and fewest monitoring observations — which most need expanded sensor coverage.</li>
+            </ol>
+            <p class="sidebar-text" style="margin-top:10px">
+              <a href="https://chihyunkim.github.io/otis_off_peak_roadway_safety/PROJECT_WRITEUP.html#policy-scenarios" class="about-link" target="_blank" rel="noopener">Full scenario analysis &rarr;</a>
+            </p>
           </div>
 
           <div class="about-sidebar-card">

@@ -340,3 +340,69 @@ body.about-page {
   color: var(--dark-ben-franklin);
   text-decoration: underline;
 }
+
+/* ============================================================
+   REPORT REFERENCE LINE
+   ============================================================ */
+.about-report-ref {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.about-report-link {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ben-franklin);
+}
+
+/* ============================================================
+   KEY STATISTICS BANNER
+   ============================================================ */
+.about-stats-banner {
+  display: flex;
+  align-items: stretch;
+  background: var(--dark-ben-franklin);
+  border-radius: var(--radius-md);
+  margin-bottom: 36px;
+  overflow: hidden;
+}
+
+.about-stat-item {
+  flex: 1;
+  padding: 28px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.about-stat-value {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 42px;
+  font-weight: 800;
+  color: var(--bell-yellow);
+  line-height: 1;
+}
+
+.about-stat-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.6;
+}
+
+.about-stat-divider {
+  width: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+  margin: 20px 0;
+}
+
+@media (max-width: 800px) {
+  .about-stats-banner {
+    flex-direction: column;
+  }
+  .about-stat-divider {
+    width: auto;
+    height: 1px;
+    margin: 0 20px;
+  }
+}
