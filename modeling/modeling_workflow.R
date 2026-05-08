@@ -492,8 +492,8 @@ predicted_scenarios_data <- bind_cols(scenario_data, predictions_scenarios) %>%
 
 explainer <- explain_tidymodels(
   model  = final_model,
-  data   = modeling_train %>% select(-all_of(target_variable)),
-  y      = modeling_train %>% select(all_of(target_variable)),
+  data   = modeling_data %>% select(-all_of(target_variable)),
+  y      = modeling_data %>% select(all_of(target_variable)),
   label  = "Random Forest"
 )
 
@@ -554,7 +554,7 @@ pdp_lanes_plot <-
        y = "Predicted speeding %",
        x = "Width of traffic lanes")
 
-pdp_lanes_density <- ggplot(modeling_train, aes(x = traffic_lanes_width)) +
+pdp_lanes_density <- ggplot(modeling_data, aes(x = traffic_lanes_width)) +
   geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
   scale_y_reverse() +          # flip so density "hangs" below the axis
   theme_minimal() +
@@ -611,7 +611,7 @@ pdp_width_plot <-
        y = "Predicted speeding %",
        x = "Width (ft)")
 
-pdp_width_density <- ggplot(modeling_train, aes(x = curb_to_curb_width)) +
+pdp_width_density <- ggplot(modeling_data, aes(x = curb_to_curb_width)) +
   geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
   scale_y_reverse() +          # flip so density "hangs" below the axis
   theme_minimal() +
@@ -665,7 +665,7 @@ pdp_lanewidth_plot <-
        y = "Predicted speeding %",
        x = "lane width (ft)")
 
-pdp_lanewidth_density <- ggplot(modeling_train, aes(x = width_per_traffic_lane)) +
+pdp_lanewidth_density <- ggplot(modeling_data, aes(x = width_per_traffic_lane)) +
   geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
   scale_y_reverse() +          # flip so density "hangs" below the axis
   theme_minimal() +
@@ -724,7 +724,7 @@ pdp_bikelane_plot <-
        y = "Predicted speeding %",
        x = "Bike lane status")
 
-pdp_bikelane_density <- ggplot(modeling_train, aes(x = bike_lane_status)) +
+pdp_bikelane_density <- ggplot(modeling_data, aes(x = bike_lane_status)) +
   geom_bar(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
   scale_y_reverse() +          # flip so density "hangs" below the axis
   theme_minimal() +
@@ -789,7 +789,7 @@ pdp_sidewalk_plot <-
        y = "Predicted speeding %",
        x = "Sidewalk status")
 
-pdp_sidewalk_density <- ggplot(modeling_train, aes(x = sidewalk_status)) +
+pdp_sidewalk_density <- ggplot(modeling_data, aes(x = sidewalk_status)) +
   geom_bar(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
   scale_y_reverse() +          # flip so density "hangs" below the axis
   theme_minimal() +
@@ -853,7 +853,7 @@ pdp_parking_plot <-
        y = "Predicted speeding %",
        x = "Parking status")
 
-pdp_parking_density <- ggplot(modeling_train, aes(x = parking)) +
+pdp_parking_density <- ggplot(modeling_data, aes(x = parking)) +
   geom_bar(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
   scale_y_reverse() +          # flip so density "hangs" below the axis
   theme_minimal() +
@@ -913,7 +913,7 @@ pdp_traffic_calming_plot <-
        y = "Predicted speeding %",
        x = "Traffic calming status")
 
-pdp_traffic_calming_density <- ggplot(modeling_train, aes(x = traffic_calming)) +
+pdp_traffic_calming_density <- ggplot(modeling_data, aes(x = traffic_calming)) +
   geom_bar(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
   scale_y_reverse() +          # flip so density "hangs" below the axis
   theme_minimal() +
@@ -969,7 +969,7 @@ pdp_length_plot <-
        y = "Predicted speeding %",
        x = "Roadway segment length")
 
-pdp_length_density <- ggplot(modeling_train, aes(x = length)) +
+pdp_length_density <- ggplot(modeling_data, aes(x = length)) +
   geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
   scale_y_reverse() +          # flip so density "hangs" below the axis
   theme_minimal() +
@@ -1023,7 +1023,7 @@ pdp_road_classification_plot <-
        y = "Predicted speeding %",
        x = "Road classification")
 
-pdp_road_classification_density <- ggplot(modeling_train, aes(x = road_classification_city)) +
+pdp_road_classification_density <- ggplot(modeling_data, aes(x = road_classification_city)) +
   geom_bar(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
   scale_y_reverse() +          # flip so density "hangs" below the axis
   theme_minimal() +
@@ -1077,7 +1077,7 @@ pdp_parcel_density_plot <-
        y = "Predicted speeding %",
        x = "Roadway segment parcel density")
 
-pdp_parcel_density_density <- ggplot(modeling_train, aes(x = parcel_density)) +
+pdp_parcel_density_density <- ggplot(modeling_data, aes(x = parcel_density)) +
   geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
   scale_y_reverse() +          # flip so density "hangs" below the axis
   theme_minimal() +

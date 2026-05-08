@@ -172,9 +172,7 @@ library(boxr)
 library(mapview)
 
 # Box authentication (run once per session)
-box_auth(client_id     = "9g407svg0yqsif8bty4fc9xre37g6p5k",
-         client_secret = "DBfYvIEhGJGSCmUODVVisSiSyvLyCFAV",
-         interactive   = FALSE)
+box_auth()
 ```
 
 
@@ -199,7 +197,7 @@ theme_set(theme_light(base_size = 12))
 ```
 
 <div class="note-to-reader">
-**A note to the reader:** This document presents the complete analysis pipeline for the MUSA 801 Practicum project on off-peak roadway safety, conducted in partnership with the City of Philadelphia's Office of Transportation and Infrastructure Systems (OTIS). Raw data are stored in a shared Box repository and loaded via the `boxr` API. Code chunks marked `eval=FALSE` contain the exact processing logic but are not re-executed here to avoid re-downloading large datasets. Pre-processed outputs are loaded directly from Box where needed.
+**A note to the reader:** This document presents the complete analysis pipeline for the MUSA 801 Practicum project on off-peak roadway safety, conducted in partnership with the City of Philadelphia's Office of Transportation and Infrastructure Systems (OTIS). Raw data are stored in a shared Box repository and loaded via the `boxr` API. Code chunks marked `eval=FALSE` contain the exact processing logic but are not re-executed here to avoid re-downloading large datasets. Pre-processed outputs are loaded directly from Box where needed. Raw and processed data which are publicly sharable are also stored in the project Github repository, located [here](https://github.com/chihyunkim/otis_off_peak_roadway_safety).
 </div>
 
 ---
@@ -208,7 +206,7 @@ theme_set(theme_light(base_size = 12))
 
 ## 1.1 Background
 
-Philadelphia's traffic fatality record has resisted improvement despite years of investment in safety infrastructure. Most interventions target peak-hour congestion — the hours when crashes are most numerous. Yet a quieter, more lethal phenomenon unfolds each night: when the same roads that efficiently move rush-hour traffic fall silent, they become something far more dangerous.
+Most roadway design criteria target peak-hour travel, when congestion is most severe. Yet a quieter, more lethal phenomenon unfolds each night: when the same roads that efficiently move rush-hour traffic fall silent, they become something far more dangerous.
 
 Wide arterials and multi-lane collectors, engineered to manage thousands of vehicles per hour, become unobstructed corridors after 10 PM. A crash at 50 mph on an empty road at 2 AM is not an anomaly — it is a structural outcome, predicted by the design of the road itself.
 
@@ -257,7 +255,7 @@ The City of Philadelphia's Office of Transportation and Infrastructure Systems (
 
 ## 1.2 Study Area
 
-The study covers **Philadelphia, Pennsylvania**, with a focus on 121 unique road segments equipped with speed measurement sensors distributed across arterial and collector streets citywide. These segments span a range of road types — from major arterials like Roosevelt Boulevard to neighborhood collectors — and carry speed monitoring data from 2022 to 2025.
+The study covers **Philadelphia, Pennsylvania**, with a focus on 446 unique road segments equipped with speed measurement sensors distributed across arterial and collector streets citywide. These segments span a range of road types — from major arterials like Roosevelt Boulevard to neighborhood collectors — and carry speed monitoring data from 2022 to 2025.
 
 Each segment is identified by a unique `seg_id` drawn from the Philadelphia Street Centerline dataset. All spatial analysis uses **EPSG:2272 (NAD83 / Pennsylvania South)** for foot-level precision.
 
@@ -270,7 +268,7 @@ centerlines_geometry <- box_read_rds(2139915462983) %>%
 # Load processed speed data — monitoring point coordinates + seg_id
 speed_pts_raw <- box_read_rds(2193174265310)
 
-# Monitored segments: filter centerlines to the 121 monitored seg_ids
+# Monitored segments: filter centerlines to the 446 monitored seg_ids
 monitored_seg_ids <- speed_pts_raw %>%
   distinct(seg_id) %>%
   mutate(seg_id = as.character(seg_id)) %>%
@@ -304,7 +302,7 @@ Our methodology proceeds in three stages, each building on the last:
 
 **Stage 1 — Establish the problem empirically.** Using five years of crash records (2020–2024), we quantify whether off-peak crashes are truly more lethal, and whether speeding-involved crashes concentrate outside peak hours. These analyses provide the empirical grounding for the modeling work.
 
-**Stage 2 — Build a predictive model.** We train a Random Forest regression model to predict the percentage of vehicles speeding on a given segment during a given hour, as a function of structural road characteristics, temporal controls, and contextual features. The model achieves **R² = 0.892** on 10-fold cross-validation.
+**Stage 2 — Build a predictive model.** We train a Random Forest regression model to predict the percentage of vehicles speeding on a given segment during a given hour, as a function of structural road characteristics, temporal controls, and contextual features. The model achieves **R² = 0.920** on and mean absolute error of 4 percentage points on held-out test data.
 
 **Stage 3 — Support planning decisions.** The model enables counterfactual simulation: if this road were placed on a road diet (lanes reduced), or a separated bike lane added, how much would predicted speeding rates change? These outputs help planners prioritize investments where structural changes produce the largest safety gains.
 
@@ -333,7 +331,7 @@ data_sources <- tribble(
   "12", "Red Light Cameras",                "PPA / OpenDataPhilly",               "Enforcement; driver behavior signal",
   "13", "PA TIP Projects",                  "DVRPC / PennDOT",                   "Planned/recent construction context",
   "14", "OpenStreetMap (OSM)",              "osmdata R package",                 "Supplemental road characteristics (pre-hand-check)",
-  "15", "Land Parcels",                     "OpenDataPhilly",                     "Parcel density as land-use activity proxy"
+  "15", "OPA Properties Data",              "OpenDataPhilly",                     "Parcel density as land-use activity proxy"
 )
 
 data_sources %>%
@@ -482,17 +480,7 @@ knitr::include_graphics(
 A chi-squared proportion test confirms that the KSI rate difference between peak and off-peak hours is **statistically significant** (p < 0.05), consistent across all five years of data (2020–2024).
 </div>
 
-### 2.2.4 Speed Limit Interaction
-
-```{r speed-interaction-img, echo=FALSE, out.width="90%", fig.cap="On roads with higher posted speed limits, the peak-vs-off-peak KSI rate gap widens — indicating that road design and low traffic interact to amplify danger."}
-knitr::include_graphics(
-  "exploratory_data_analysis/Crash_Data_Analysis_Clean_files/figure-html/speed-interaction-1.png"
-)
-```
-
-On roads with higher posted speed limits (35–45 mph), the gap in KSI rate between peak and off-peak hours widens further. The posted limit is not the binding constraint on speed during off-peak hours — **road design is**.
-
-### 2.2.5 Spatial Distribution
+### 2.2.4 Spatial Distribution
 
 ```{r crash-spatial-setup, message=FALSE, warning=FALSE}
 crash_summary <- box_read_csv(2195155235316) %>%
@@ -556,7 +544,7 @@ Comparing the two maps: **high total-crash corridors** (dense inner-city grid) a
 Speed and volume data are provided as annual CSV files in a shared Box folder. They are read in batch using a helper function and joined with the `recordnum` key.
 
 ```{r read-speed-volume, eval=FALSE}
-box_auth()
+
 box_raw_data_folder       <- 362958311858
 box_processed_data_folder <- 362958210990
 
@@ -599,13 +587,8 @@ Speed data are collected via pneumatic tube counters, providing **hourly vehicle
 
 - `recordnum`: unique measurement session identifier — the most reliable row-level key (no duplicates at hour 0)
 - `countdate`, `count_hr`: date and hour of measurement (0–23)
-- Speed bin columns: vehicle counts per 5 mph increment (e.g., `speed_0_5`, `speed_5_10`, ...)
-- `trafdir`: traffic direction (`both`, `east`, `north`, etc.)
-- `aadv`: annual average daily volume; `speedlimit`: posted speed limit
-
-**Key identifier finding:** `recordnum` is the cleanest unique row identifier. Lat/lon coordinates have minor duplication issues at some locations (multiple tubes measuring the same road section), so `recordnum` is used throughout as the primary key.
-
-**Speed–volume join:** `recordnum` is also the join key between speed and volume datasets. About 15% of rows show minor volume disagreements between the two files; the volume dataset value takes priority since it is purpose-built for volume measurement.
+- Speed bin columns: vehicle counts per 5 mph increment (e.g., `speed_21_25`, `speed_26_30`, ...)
+- `speedlimit`: posted speed limit
 
 ### 2.3.3 Data Preparation: Long Format & Speeding Categories
 
@@ -895,13 +878,15 @@ mapview(speed_data_centerlines_segments %>%
 #### Binary: Speeding vs. Not Speeding
 
 ```{r speeding-by-hour-binary, message=FALSE, warning=FALSE}
-speed_data_analysis %>%
-  group_by(recordnum, countdate, count_hr, time_of_day, speed_category_binary) %>%
-  summarise(count = sum(count), .groups = "drop") %>%
-  group_by(count_hr, time_of_day, speed_category_binary) %>%
-  summarise(count = sum(count), .groups = "drop") %>%
-  mutate(percent = count / sum(count)) %>%
-  filter(speed_category_binary == "Speeding") %>%
+
+speed_data_analysis %>% 
+  group_by(recordnum, countdate, count_hr, time_of_day, speed_category_binary) %>% 
+  summarize(count = sum(count)) %>% 
+  group_by(count_hr, time_of_day, speed_category_binary) %>% 
+  summarize(count = sum(count)) %>% 
+  mutate(percent = count / sum(count)) %>% 
+  ungroup() %>% 
+  filter(speed_category_binary != "Not speeding") %>%
   ggplot(aes(x = count_hr, y = percent, fill = time_of_day)) +
   geom_col() +
   scale_y_continuous(labels = label_percent()) +
@@ -909,9 +894,10 @@ speed_data_analysis %>%
   labs(title    = "Share of traffic speeding by hour of day",
        subtitle = "Off-peak hours show consistently higher speeding rates",
        x = "Hour", y = "% of traffic speeding", fill = "Period")
+
 ```
 
-The pattern is consistent and stark: **off-peak hours carry substantially higher speeding rates than peak hours across every hour of the day.** The gap is widest in the early morning (1–5 AM), where the share of speeding traffic is nearly double the midday peak. Even the off-peak midday window (11 AM–4 PM) shows noticeably elevated speeding compared to morning and evening commute windows. This establishes that the off-peak speeding phenomenon is not confined to late nights — it is a persistent feature of low-volume conditions throughout the day.
+The pattern is consistent and stark: **off-peak hours carry substantially higher speeding rates than peak hours across every hour of the day.** The gap is widest in the early morning (1–5 AM), where the share of speeding traffic is nearly double the midday peak.
 
 #### Detailed: By Severity of Speeding
 
@@ -1017,7 +1003,7 @@ off_peak_any_speeding %>%
   row_spec(1, bold = TRUE, background = "#fff3e0")
 ```
 
-Major arterials and high speed ramps are disproportionately prone to speeding drivers in off-peak hours.
+Major arterials are disproportionately prone to speeding drivers in off-peak hours.
 
 The map below shows the location of these majority-speeding roadways.
 
@@ -1077,7 +1063,7 @@ off_peak_high_speeding %>%
   row_spec(1, bold = TRUE, background = "#fff3e0")
 ```
 
-Major arterials and high speed ramps are even more disproportionately prone to high-speeding drivers in off-peak hours.
+Major arterials are even more disproportionately prone to high-speeding drivers in off-peak hours.
 
 The map below shows the location of these high-speeding roadways.
 
@@ -1098,33 +1084,7 @@ mapview(off_peak_high_speeding_top_map,
 Major arterials are disproportionately represented in both groups. For high-severity speeding (11+ mph over), the concentration on Major Arterials is even more pronounced than for any speeding.
 </div>
 
-### 2.3.8 Volume–Speeding Relationship
-
-Does lower traffic volume in a given hour lead to higher speeding? The data show **no definitive pattern** — neither for any speeding nor for high speeding. This suggests that volume alone does not drive off-peak speeding; rather, the structural road characteristics (the focus of this project) are the dominant predictors.
-
-```{r volume-speeding, message=FALSE, warning=FALSE}
-speed_data_analysis %>%
-  filter(!is.na(roadway_type)) %>%
-  group_by(recordnum, countdate, count_hr, roadway_type,
-           time_of_day, speed_category_binary, volume_total) %>%
-  summarise(count = sum(count), .groups = "drop") %>%
-  group_by(recordnum, countdate, count_hr, roadway_type, time_of_day, volume_total) %>%
-  mutate(percent = count / sum(count)) %>%
-  filter(speed_category_binary == "Speeding") %>%
-  ggplot(aes(x = volume_total, y = percent, color = roadway_type)) +
-  geom_point(alpha = 0.2, size = 0.8) +
-  geom_smooth(method = "lm", se = FALSE, linewidth = 1.1) +
-  scale_y_continuous(labels = label_percent()) +
-  scale_color_manual(values = roadway_colors) +
-  scale_x_log10() +
-  facet_wrap(~ time_of_day, ncol = 2) +
-  labs(title  = "Volume vs. speeding rate by roadway type and time of day",
-       x = "Total volume (log scale)", y = "% traffic speeding",
-       color = "Roadway type") +
-  theme(legend.position = "bottom")
-```
-
-### 2.3.9 Modeling Outcome Construction
+### 2.3.8 Modeling Outcome Construction
 
 From the long-format speed data, we aggregate to two modeling output formats used downstream.
 
@@ -1190,11 +1150,12 @@ Research on Chicago's protected bike lane network — particularly the Dearborn 
 
 ## 3.1 Network Construction
 
-The base network uses Philadelphia's official Street Centerline file, with each segment identified by `seg_id`. Road characteristics were compiled from three sources and merged in priority order:
+The base network uses Philadelphia's official Street Centerline file, with each segment identified by `seg_id`. Road characteristics were compiled from these sources:
 
-1. **RMS Admin data** (highest priority): surface width (`surfawidth`), segment geometry
-2. **DVRPC Complete Streets**: road typology, lane counts (`NEW_LANES`), roadway width (`NEW_WID`), divided roadway indicator (`DIV_RDWY`)
-3. **Hand-checked data**: for segments with conflicting or missing values, all four team members manually reviewed characteristics via Google Street View
+1. **RMS Admin data**: Segment geometry
+2. **City of Philadelphia Complete Streets dataset**: Road typology, lane counts (`NEW_LANES`), divided roadway indicator (`DIV_RDWY`)
+3. **City of Philadelphia Bike Lanes dataset**: Historical bike lane installation data
+3. **Hand-checked data**: We individually verified lane counts, parking status, sidewalk status, bike lane status, and other roadway configuration data found in out data sources, using satellite and street view imagery. We also measured curb-to-cub width, roadway width dedicated to traffic lanes, and shoulder width using satellite imagery.
 
 ```{r build-network, eval=FALSE}
 network_main <- box_read_rds(2151757279199) %>%
@@ -1336,7 +1297,7 @@ tribble(
   kable_styling(font_size = 13)
 ```
 
-Hand-checked values were applied via `coalesce()` priority: verified values override automated values where available. This ensures that the 472 monitored segments — the foundation of the model — have the most accurate road characteristic data possible.
+Hand-checked values were applied via `coalesce()` priority: verified values override automated values where available. This ensures that the 446 monitored segments — the foundation of the model — have the most accurate road characteristic data possible.
 
 ---
 
@@ -1348,9 +1309,9 @@ The modeling outcome is **`all_speeding_percent`**: the proportion of vehicles o
 
 1. **Statistical tractability:** A continuous proportion is far more amenable to regression modeling than crash counts, which are rare, overdispersed, and stochastic at the segment level.
 2. **Theoretical link to KSI:** Speeding is the strongest direct driver of KSI crash outcomes — reducing speeding rates is the mechanism by which road design changes save lives.
-3. **Policy relevance:** Speeding rates are *changeable* through design interventions; historical crash records are not.
+3. **Policy relevance:** Even when speeding does not result in a crash, it increases the risk of near-misses and has direct psychological impacts on road users.
 
-Speed measurements are aggregated to **four time periods of day** — Off-peak (night), Peak (morning), Off-peak (midday), and Peak (evening) — rather than 24 individual hours. This design choice improves generalizability, reduces noise from sparse late-night hours, and aligns directly with the policy-relevant distinction between peak and off-peak conditions.
+Speed measurements are aggregated to **four time periods of day** — Off-peak (night), Peak (morning), Off-peak (midday), and Peak (evening) — rather than 24 individual hours. This design choice improves generalizability, makes model results easier to communicate, and aligns directly with the policy-relevant distinction between peak and off-peak conditions.
 
 After removing rows with missing outcome values, the pre-processed modeling dataset contains approximately **9,000 segment-period observations**, representing 121 monitored segments × multiple measurement dates × 4 periods of day.
 
@@ -1401,10 +1362,8 @@ features <- tribble(
   "Intervention/Context", "count_transit",                "Continuous",  "Number of SEPTA bus stops on segment",
   "Intervention/Context", "count_intersection_ctrl",      "Continuous",  "Number of stop signs and signals within 30 ft of segment endpoints",
   "Intervention/Context", "parcel_density",               "Continuous",  "Adjacent parcel density — land-use activity proxy",
-  # Volume & crash context
-  "Volume",               "volume_total",                 "Continuous",  "Total vehicles observed during the measurement period",
-  "Crash Context",        "crashes",                      "Continuous",  "Crashes on segment during this time period (2020–2024), period-matched",
-  "Crash Context",        "ksi_rate",                     "Continuous",  "KSI crash rate for this segment and period, period-matched"
+  # Volume
+  "Volume",               "volume_total",                 "Continuous",  "Total vehicles observed during the measurement period"
 )
 
 features %>%
@@ -1431,9 +1390,9 @@ features %>%
 
 ## 4.3 Feature Engineering
 
-**Width decomposition.** Rather than using a single `width` or `lanes` variable, the final model decomposes roadway geometry into three complementary measures: `curb_to_curb_width` (total cross-section), `traffic_lanes_width` (width allocated to through traffic), and `width_per_traffic_lane` (average per-lane width). This captures the effects of lane count, lane width, and total roadway scale independently. A `wide_shoulder` flag (shoulder ≥ 8 ft) adds a further indicator of lateral clearance beyond the travel lanes. All four width variables were collected during the hand-check phase, with field measurements taken or verified via Google Street View for all 121 monitored segments.
+**Width decomposition.** Rather than using a single `width` or `lanes` variable, the final model decomposes roadway geometry into three complementary measures: `curb_to_curb_width` (total cross-section), `traffic_lanes_width` (width allocated to through traffic), and `width_per_traffic_lane` (average per-lane width). This captures the effects of lane count, lane width, and total roadway scale independently. A `wide_shoulder` flag (shoulder ≥ 8 ft) adds a further indicator of lateral clearance beyond the travel lanes. All four width variables were collected during the hand-check phase, with field measurements taken or verified via Google Street View for all monitored segments.
 
-**Bike lane status.** For the 472 monitored segments, bike lane type was hand-verified and consolidated into four categories used by the model:
+**Bike lane status.** For all monitored segments, bike lane type was hand-verified and consolidated into four categories used by the model:
 
 ```{r bike-lane-table, echo=FALSE}
 tribble(
@@ -1469,13 +1428,9 @@ tribble(
   column_spec(2, width = "10em")
 ```
 
-This aggregation reduces sparsity (late-night hours have very few measurements per segment) and focuses the model on the policy-relevant peak vs. off-peak distinction.
-
-**Crash context — period-matched.** Crash counts and KSI rates are joined to modeling observations using both `seg_id` *and* `speed_measurement_period`, so the model sees crashes specific to each time window rather than a segment-wide total.
-
 ## 4.4 Model Architecture
 
-We use a **Random Forest regression** with `ranger` as the engine. `mtry` (features sampled per split) and `min_n` (minimum node size) are tuned jointly over a regular grid; `trees` is fixed at 500.
+We use a **Random Forest regression** with `ranger` as the engine. The model hyperparameters `mtry` (features sampled per split) and `min_n` (minimum node size) are tuned jointly over a regular grid; `trees` is fixed at 500.
 
 ```{r model-spec, eval=FALSE}
 # Random Forest with hyperparameter tuning
@@ -1544,16 +1499,15 @@ final_fit <- final_workflow %>%
   last_fit(modeling_split, metrics = metrics)
 ```
 
-The reproducibility seed throughout is **2718** — Euler's number × 1000. The final model object (trained on the full training set with the selected hyperparameters) is stored in Box and loaded above.
+The final model object (trained on the full training set with the selected hyperparameters) is stored in Box and loaded above.
 
 ## 4.5 Model Performance
 
-The final model was selected by minimizing RMSE across the hyperparameter tuning grid, then evaluated on the held-out 25% test set.
+The final model was selected by minimizing root mean square error (RMSE) across the hyperparameter tuning grid, then evaluated on the held-out 25% test set.
 
 ```{r performance-table, echo=FALSE}
 performance <- tribble(
   ~Set,                            ~MAE,       ~RMSE,      ~`R²`,
-  "10-fold CV (tuning grid)",      "—",        "~0.074",   "—",
   "**Test set (held-out 25%)**",   "**0.042**","**0.074**","**0.920**"
 )
 
@@ -1598,8 +1552,8 @@ target_variable <- "all_speeding_percent"
 
 explainer <- explain_tidymodels(
   model  = final_model,
-  data   = modeling_train %>% select(-all_of(target_variable)),
-  y      = modeling_train %>% pull(all_of(target_variable)),
+  data   = modeling_data %>% select(-all_of(target_variable)),
+  y      = modeling_data %>% pull(all_of(target_variable)),
   label  = "Random Forest",
   verbose = FALSE
 )
@@ -1629,11 +1583,11 @@ plot(vip) +
        x        = "RMSE increase (importance)")
 ```
 
-The permutation importance chart reveals a clear hierarchy. **`speed_measurement_period`** (time of day) is by far the dominant predictor — shuffling it causes the largest RMSE increase of any variable, reflecting the fundamental off-peak vs. peak divide documented throughout Section 2. **Road geometry variables** — particularly `traffic_lanes_width`, `curb_to_curb_width`, and `width_per_traffic_lane` — collectively represent the next tier, confirming that the physical structure of the roadway is the primary structural risk factor. **`road_classification_city`** captures the coarser typology effect (Major vs. Minor Arterial vs. Collector), which the width variables do not fully absorb. **`speed_limit`** ranks mid-tier: posted limits encode some road design intent, but they are not the binding constraint on actual operating speeds — road geometry and time of day dominate. **Intervention variables** (`bike_lane_status`, `traffic_calming`, `parking`) rank lower individually but are the most *policy-actionable* predictors: unlike road classification or curb width, they can be changed without full reconstruction. **Crash context variables** (`crashes`, `ksi_rate`) contribute meaningfully, validating that historical crash experience adds predictive signal beyond geometry alone.
+The variable importance analysis indicates that the length of the road segment has the strongest influence on the model results; longer segments with more distance between intersections generally have higher speeding rates. The second most influential factor is the width of the road dedicated to traffic lanes, suggesting that overall road geometry has a powerful effect on speeding behavior. Our time variable, `speed_measurement_period`, ranks around the middle of the list, though it is also highly correlated with the `volume_total` variable, the third most influential variable in the model.
 
 ### 4.6.2 Partial Dependence Plots
 
-**Partial Dependence Plots (PDPs)** show the marginal effect of each predictor while all other predictors are held at their observed values.
+**Partial Dependence Plots (PDPs)** show the marginal effect of each predictor while all other predictors are held at their observed values. In other words, PDPs show what the model would predict as a variable of interest changes, controlling for all other variables feeding into the model.
 
 <div class="pdp-section">
 
@@ -1655,7 +1609,7 @@ as_tibble(pdp_period$agr_profiles) %>%
        y = "Predicted speeding rate", x = "Period of day")
 ```
 
-Off-peak (night) carries the highest predicted speeding rate of all four periods, and Peak (morning) the lowest, with Peak (evening) and Off-peak (midday) falling between them in that order. The ordering — and the gap between off-peak (night) and all other periods — is visible directly in the PDP line above. This is policy-relevant: the same road, with identical geometry, produces meaningfully different predicted speeding depending purely on time of day. The fact that off-peak (midday) also exceeds both peak periods confirms that the driver mechanism is low-volume conditions rather than darkness specifically. Interventions that target road design will reduce speeding across all four periods, whereas time-of-day restrictions (e.g., speed cameras only at night) address only part of the problem.
+Unsurprisingly, the model predicts that night-time off-peak traffic has the highest incidence of traffic, even after taking all other variables into account.
 
 </div><div class="pdp-section">
 
@@ -1673,7 +1627,7 @@ p_lanewidth <- as_tibble(pdp_lanewidth$agr_profiles) %>%
   labs(title = "Predicted speeding by width of traffic lanes",
        y = "Predicted speeding rate", x = "Traffic lane width (ft)")
 
-p_density <- ggplot(modeling_train, aes(x = traffic_lanes_width)) +
+p_density <- ggplot(modeling_data, aes(x = traffic_lanes_width)) +
   geom_density(fill = palette_blue, alpha = 0.25, color = palette_blue) +
   scale_y_reverse() +
   theme_minimal() +
@@ -1684,7 +1638,9 @@ p_density <- ggplot(modeling_train, aes(x = traffic_lanes_width)) +
 p_lanewidth / p_density + plot_layout(heights = c(4, 1))
 ```
 
-The PDP shows that predicted speeding increases as traffic lane width increases — the relationship is monotonic and visible in the line above. The density plot below shows the distribution of `traffic_lanes_width` values in the training data; most segments fall in the lower-to-mid range of the width axis. The steepest portion of the curve (where additional width produces the largest incremental increase in predicted speeding) is apparent in the chart. Read in conjunction with the density plot, this means the gradient is well-supported by training data across the bulk of the distribution. Road diet scenarios that reduce lane width would, by the model's prediction, move segments leftward along this curve toward lower predicted speeding.
+The model estimates a large increase in speeding as the width of roadway dedicated to car travel increases: at 10 feet of space, the estimated speeding percentage is around 20%, but at 30 feet of roadway space, the speeding percentage is estimated to increase to more than 30%.
+
+The curve at the bottom of the plot shows how many data points exist at each part of the x-axis; the lion's share of segments in our data have less than 40ft of traffic lane width.
 
 </div><div class="pdp-section">
 
@@ -1706,43 +1662,125 @@ as_tibble(pdp_lw_period$agr_profiles) %>%
        color = "Period")
 ```
 
-The interaction PDP shows predicted speeding by traffic lane width for each time period separately. The ordering of lines (which period is highest at any given width) and whether the lines diverge or converge as width increases are both readable from the chart above. The key observable pattern: the period lines are not parallel — the gap between them changes as lane width changes, indicating that the effect of lane width on predicted speeding is not uniform across time periods. Specifically, the chart shows that the off-peak (night) line sits above the other period lines, and that this separation is more pronounced at wider lane values. This means the predicted benefit of reducing lane width is largest for the highest-risk time window.
+The interaction PDP shows predicted speeding by traffic lane width for each time period separately. The ordering of lines (which period is highest at any given width) and whether the lines diverge or converge as width increases are both readable from the chart above. As we saw above, night-time off-peak traffic is significantly more likely to speed, though whether the relationship between traffic lane width and speeding is different at night compared to other times of day is unclear.
 
 </div><div class="pdp-section">
 
-#### Curb-to-Curb Width
+#### Width Per Traffic Lane
 
-```{r pdp-curb-width, message=FALSE, warning=FALSE, fig.cap="Total roadway cross-section independently predicts higher speeding, even after controlling for lane count and lane width."}
-pdp_curbwidth <- model_profile(explainer, type = "partial",
-                                variables = "curb_to_curb_width", N = NULL)
+```{r message=FALSE, warning=FALSE, fig.cap="Predicted speeding rate by width per traffic lane."}
+pdp_width_per_lane <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "width_per_traffic_lane",
+                N         = NULL) 
 
-p_cw <- as_tibble(pdp_curbwidth$agr_profiles) %>%
+pdp_width_per_lane_plot <- 
+  as_tibble(pdp_width_per_lane$agr_profiles) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
-  geom_line(linewidth = 1.3, color = palette_blue) +
-  scale_y_continuous(labels = label_percent(), limits = c(0, NA),
-                     expand = expansion(mult = c(0, 0.2))) +
-  labs(title = "Predicted speeding by curb-to-curb width",
-       subtitle = "Wider total cross-sections predict higher speeding independent of lane count",
-       y = "Predicted speeding rate", x = "Curb-to-curb width (ft)")
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by width per lane",
+       y = "Predicted speeding %",
+       x = "Avg lane width (ft)")
 
-p_cw_density <- ggplot(modeling_train, aes(x = curb_to_curb_width)) +
-  geom_density(fill = palette_blue, alpha = 0.25, color = palette_blue) +
-  scale_y_reverse() +
+pdp_width_per_lane_density <- ggplot(modeling_data, aes(x = width_per_traffic_lane)) +
+  geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
   theme_minimal() +
-  theme(axis.title.y = element_blank(), axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(), panel.grid = element_blank()) +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
   labs(x = "Distribution of modeling data")
 
-p_cw / p_cw_density + plot_layout(heights = c(4, 1))
+pdp_width_per_lane_plot / pdp_width_per_lane_density + plot_layout(heights = c(4, 1))
+
 ```
 
-The curb-to-curb PDP shows an upward-sloping relationship between total roadway width and predicted speeding, independent of `traffic_lanes_width`. The fact that both width variables retain predictive power in the model (as confirmed by variable importance) means the total cross-section carries information about speeding beyond what lane width alone captures. In practical terms, this suggests that interventions which reduce total curb-to-curb width — even without changing the number of travel lanes — would, according to the model, also reduce predicted speeding. The density plot shows the distribution of curb-to-curb values in the training data; the PDP is well-supported across the middle of that range.
+Looking at the width of individual traffic lanes, speeding is overall predicted to increase as width-per-lane increases from 10ft to 15ft.
+
+</div><div class="pdp-section">
+
+#### Roadway segment length
+
+```{r message=FALSE, warning=FALSE, fig.cap="Predicted speeding rate by length of roadway segment."}
+
+pdp_length <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "length",
+                N         = NULL) 
+
+pdp_length_plot <- 
+  as_tibble(pdp_length$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by segment length",
+       y = "Predicted speeding %",
+       x = "Roadway segment length")
+
+pdp_length_density <- ggplot(modeling_data, aes(x = length)) +
+  geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
+
+pdp_length_plot / pdp_length_density + plot_layout(heights = c(4, 1))
+
+```
+
+The predicted relationship between speeding and segment length (i.e., the distance between intersections) is nonlinear, but speeding tends to increase after segment length grows above around 300 ft. Note that there is a long tail in the distribution and segments with length above 800 ft are rare. 
+
+</div><div class="pdp-section">
+
+#### Road Classification by Time Period
+
+```{r message=FALSE, warning=FALSE, fig.cap="Speeding by road classification and time of day."}
+
+pdp_road_classification_by_period <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "road_classification_city",
+                groups    = "speed_measurement_period",
+                N         = NULL)
+
+pdp_road_classification_by_period_plot <- 
+  as_tibble(pdp_road_classification_by_period$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by road classification and time of day",
+       y = "Predicted speeding %",
+       x = "Road classification",
+       color = "Time of day")
+
+pdp_road_classification_by_period_plot
+
+```
+
+The predicted speeding percentage across different road types differs starkly by time of day. During peak hours, smaller roads are estimated to be more speeding-prone than crowded arterials, but the pattern flips at night—and arterials become the main speeding risks. 
 
 </div><div class="pdp-section">
 
 #### Bike Lane Status
 
-```{r pdp-bike, message=FALSE, warning=FALSE, fig.cap="Separated bike lanes show the strongest speed-reducing association. Sharrows and painted lanes show smaller but consistent effects."}
+```{r pdp-bike, message=FALSE, warning=FALSE, fig.cap="Separated bike lanes show the strongest speed-reducing association."}
 pdp_bike <- model_profile(explainer, type = "partial",
                            variables = "bike_lane_status", N = NULL)
 
@@ -1755,7 +1793,7 @@ p_bike <- as_tibble(pdp_bike$agr_profiles) %>%
   labs(title = "Predicted speeding by bike lane status",
        y = "Predicted speeding rate", x = "Bike lane type")
 
-p_bike_bar <- ggplot(modeling_train, aes(x = fct_relevel(bike_lane_status,
+p_bike_bar <- ggplot(modeling_data, aes(x = fct_relevel(bike_lane_status,
                         "None","Sharrow","Painted","Separated"))) +
   geom_bar(fill = palette_blue, alpha = 0.25, color = palette_blue) +
   scale_y_reverse() +
@@ -1767,7 +1805,7 @@ p_bike_bar <- ggplot(modeling_train, aes(x = fct_relevel(bike_lane_status,
 p_bike / p_bike_bar + plot_layout(heights = c(4, 1))
 ```
 
-The PDP shows a clear monotonic relationship: **None > Sharrow > Painted > Separated**, with predicted speeding declining at each step of protection. The largest single drop occurs between Painted and Separated — consistent with the Chicago Dearborn Street evidence reviewed in Section 2.4, where physical protection structures created a geometric narrowing effect that reduced motor vehicle operating speeds even in the absence of cyclists. Sharrows and painted lanes show smaller but meaningful effects, likely through a combination of narrowed perceived travel lane width and driver awareness of shared space. The bar chart below shows that most monitoring network segments currently have no bike infrastructure — indicating that upgrading even to painted lanes across this network would shift a large portion of the distribution toward lower predicted speeding rates.
+The model estimates a potential modest impact of separated bike lanes on speeding. Interestingly, sharrows, if anything, are predicted to increase speeding (though the size of the effect is small compared to the average model error).
 
 </div><div class="pdp-section">
 
@@ -1788,7 +1826,7 @@ as_tibble(pdp_sidewalk$agr_profiles) %>%
        y = "Predicted speeding rate", x = "Sidewalk presence")
 ```
 
-Streets with sidewalks on both sides show meaningfully lower predicted speeding than those with no sidewalks. The reduction from "None" to "Both sides" is consistent with two mechanisms documented in the urban design literature: (1) **perceived enclosure** — sidewalks, especially when bounded by trees or buildings, narrow the visual field and signal to drivers that the space is shared with pedestrians; and (2) **actual pedestrian presence** — segments with bilateral sidewalks in Philadelphia are more likely to have active street-level uses that generate pedestrian crossings, which serve as natural speed brakes. Importantly, sidewalk status in our model captures this combined structural and activity signal, even though the model does not observe pedestrian counts directly.
+Streets with sidewalks on both sides show meaningfully lower predicted speeding than those with no sidewalks. The reduction from "None" to "Both sides" is consistent with two mechanisms documented in the urban design literature: (1) **perceived enclosure** — sidewalks, especially when bounded by trees or buildings, narrow the visual field and signal to drivers that the space is shared with pedestrians; and (2) **actual pedestrian presence** — segments with bilateral sidewalks in Philadelphia are more likely to have active street-level uses that generate pedestrian crossings, which serve as natural speed brakes. Importantly, sidewalk status in our model captures this combined structural and activity signal, even though the model does not observe pedestrian counts directly. It is worth noting that the model predicts higher speeding on roads with a sidewalk on only one side; this may pick up on the fact that certain high-speed arterials have sidewalks only on one side, and that the sidewalk variable is capturing some fact about these roadways not reflected in our other variables.
 
 </div><div class="pdp-section">
 
@@ -1807,7 +1845,7 @@ as_tibble(pdp_calming$agr_profiles) %>%
        y = "Predicted speeding rate", x = "Traffic calming present?")
 ```
 
-Traffic calming devices (speed humps, cushions, raised crossings) show a clear, discrete protective association — the step-down from no calming to calming is among the cleaner effects in the model. Unlike the continuous width variables, `traffic_calming` is a binary indicator, so the PDP displays a simple comparison between the two states. The magnitude of the protective effect is meaningful: segments with traffic calming have substantially lower predicted speeding rates, holding all other predictors constant. This effect is also borne out in the error analysis (Section 4.7): calmed segments have an RMSE of only 0.025 — the lowest of any subgroup — because the physical constraints leave little variance in actual behavior, making them both safer and more predictable. From a planning perspective, traffic calming represents one of the highest-value, lowest-cost interventions available: it is cheaper than lane removal, can be deployed rapidly, and the model confirms its effectiveness even on segments where other risk factors (wide lanes, no sidewalks) are present.
+Traffic calming devices (speed humps, cushions, raised crossings) show a clear protective association.
 
 </div>
 
@@ -1889,13 +1927,7 @@ list(
   </div>
 </div>
 
-Three diagnostic patterns emerge from the subgroup error analysis:
-
-**High-error subgroups (Major Arterials, 5+ lanes, off-peak night)** share a common feature: they are both the most dangerous and the least represented in the monitoring network. Major Arterials and very wide roads are over-represented in KSI crashes but under-represented in training data, leading the model to rely on interpolation from similar segments. This is where prediction uncertainty is highest for the scenario simulations in Section 6, and where expanding the monitoring network would yield the greatest modeling benefit.
-
-**Off-peak (night) is the hardest time period to predict** (RMSE = 0.055), even though the model already identifies it as the highest-risk window. This reflects genuine behavioral heterogeneity at night: late-night drivers include both commuters returning home and a smaller share of high-risk drivers with elevated impairment rates — a mix the model cannot fully disentangle from road characteristics alone.
-
-**Traffic-calmed segments are the easiest to predict** (RMSE = 0.025 — less than half the global RMSE of 0.074). Physical calming devices sharply constrain the achievable operating speed, leaving little residual variance for the model to miss. This reinforces the policy case: traffic calming not only reduces speeding, it makes future speeding more predictable — a valuable property for planning.
+Generally, subgroups of data do not show markedly different error levels compared to the dataset as a whole (~7 percentage points RMSE). However, roadways with characteristics conducive to high speeding (Major Arterials, 5+ lanes, off-peak night) are also the hardest to predict. Partly, this is because of underlying heterogeneity in these groups (for example, Major Arterials include both narrow roads like 34th St and wide roads like Columbus Blvd). The model also tends to underestimate night-time speeding along arterials, which often see very high speeding percentage in reality. This is an important limitation of our model because this population of roadways is also the focus of our use case.
 
 ---
 
@@ -1907,7 +1939,7 @@ Despite lower total crash counts, off-peak hours carry significantly higher KSI 
 </div>
 
 <div class="callout callout-finding">
-**Finding 2 — Speeding is the mechanism; road design is the cause.**
+**Finding 2 — Speeding is an important mechanism, impacted by road design.**
 Off-peak speeding rates are substantially higher than peak rates, and the temporal pattern of speeding rates mirrors the KSI rate pattern almost exactly. Crash severity is not random — it is predictable from road design.
 </div>
 
@@ -1917,28 +1949,18 @@ The Random Forest model explains 92.0% of variance in period-level speeding rate
 </div>
 
 <div class="callout callout-finding">
-**Finding 4 — Lane width and total roadway cross-section are the dominant structural predictors.**
-Both traffic lane width and curb-to-curb width have strong, independent associations with higher predicted speeding rates. The steepest risk gradient occurs in the 20–40 ft traffic lane width range — the profile of a typical 2-to-4-lane arterial. Per-lane width matters independently: wider individual lanes encourage higher operating speeds even holding total lanes constant.
+**Finding 4 — Basic roadway geometry measurements are the dominant structural predictors.**
+Both roadway segment length and the combined width of traffic lanes have strong associations with higher predicted speeding rates. The steepest risk gradient occurs in the 10–30 ft traffic lane width range — consistent with the increase from 1 to 3 lanes. Per-lane width also matters: wider individual lanes encourage higher operating speeds even holding total lanes constant.
 </div>
 
 <div class="callout callout-finding">
 **Finding 5 — Traffic calming reduces speeding.**
-Segments with traffic calming devices show meaningfully lower predicted speeding rates — especially on wider roads where other friction is absent.
+Segments with traffic calming devices show meaningfully lower predicted speeding rates.
 </div>
 
 <div class="callout callout-finding">
-**Finding 6 — Bike infrastructure reduces speeding.**
-Separated bike lanes show the strongest protective association; painted lanes and sharrows show smaller but positive effects. Bike infrastructure is a safety co-benefit investment.
-</div>
-
-<div class="callout callout-finding">
-**Finding 7 — One-way streets are higher risk.**
-One-way street configuration is independently associated with higher predicted speeding rates at equivalent lane counts. One-way to two-way conversions may carry safety benefits beyond what is typically expected.
-</div>
-
-<div class="callout callout-finding">
-**Finding 8 — The off-peak danger concentrates on wide arterials.**
-The late-night speeding spike is most pronounced on wide, multi-lane, high-classification roads. These segments are the primary targets for safety intervention.
+**Finding 6 — The off-peak danger concentrates on arterials.**
+The late-night speeding spike is most pronounced on roads classified as arterials. This finding lends additional impetus to prioritizing off-peak safety interventions on arterials.
 </div>
 
 ---
@@ -2042,45 +2064,39 @@ The application reads pre-computed scenario outputs directly — no model is cal
 
 # 8. Limitations
 
-**Data coverage.** Speed measurement data covers only 121 road segments, concentrated on higher-classification streets. Model predictions for local residential streets and unmeasured segments should be interpreted with caution. Error analysis confirms that Major Arterials and roads with 5+ lanes carry the highest prediction RMSE.
+Important limitations of this project include:
 
-**Temporal imbalance.** 2022 contributes ~46% of all measurement records. Year-specific road conditions, construction, or enforcement patterns in 2022 may influence the model in ways that are difficult to disentangle.
+- Model predictions are estimates with errors and uncertainty. They reflect patterns in the input data and do not prove cause-and-effect relationships.
+- Real-world safety outcomes depend on implementation quality, enforcement, driver response, and other factors not captured in the model.
+- The speed data underlying the model are limited to 446 roadway segments, so predictions are not available for a wider selection of roads.
+- Time-of-day predictions account for traffic volume and time-of-year effects, but not other changing conditions such as parking occupancy or pedestrian volume. As a result, night-time speeding may sometimes be underestimated.
+- Roadway configurations may have changed since speed measurements were made in 2022-2025. We attempted to capture road characteristics accurate to the time of measurement, but discrepancies may remain.
+- Speeding is treated as a binary yes/no outcome for modeling and communication, though different degrees of speeding have different safety implications.
 
-**Predictive, not causal.** The model is predictive, not causal. Partial dependence plots reveal marginal associations, not controlled experimental effects. Scenario simulation outputs should be treated as indicative planning estimates, not precise causal forecasts.
-
-**Monitoring site selection bias.** Speed monitoring sites may be deployed preferentially on known high-risk corridors. If so, the model may overestimate speeding risk on unmonitored streets.
-
-**Period-level aggregation.** The model operates at the coarse period level (4 periods per day). Within-period variation, weather, special events, and hour-by-hour fluctuations are not captured.
-
-**Width measurement uncertainty.** Despite hand-verification of all 121 monitored segments, width measurements on streets with unusual cross-sections carry some imprecision, particularly where curb placement is irregular.
 
 ---
 
 # 9. Conclusion & Recommendations
 
-This project delivers the first structural prediction framework for off-peak roadway safety in Philadelphia. By empirically confirming the off-peak safety paradox, building a high-accuracy speeding prediction model, and translating that model into actionable planning scenarios, we shift safety analysis from **reactive** (responding to crash histories) to **preventive** (identifying structurally dangerous corridors before the next fatality).
+This project delivers a novel structural prediction framework for off-peak roadway safety in Philadelphia. By empirically confirming the off-peak safety paradox, building a high-accuracy speeding prediction model, and translating that model into actionable planning scenarios, we shift safety analysis from **reactive** (responding to crash histories) to **preventive** (identifying structurally dangerous corridors before the next fatality).
 
 ### What We Found
 
 Five years of PennDOT crash records confirm that Philadelphia's off-peak hours are disproportionately deadly. Evening hours (8 PM–3 AM) represent 14% of daily traffic but produce 46% of pedestrian KSI crashes — a concentration ratio of more than 3×. This is not random. Speed measurement data from 121 monitored road segments shows that off-peak speeding rates are consistently higher than peak rates, with the gap widest on wide, multi-lane arterials. The same roads that manage peak-hour congestion safely become dangerous corridors once traffic thins and geometric constraints become the only speed deterrent.
 
-The Random Forest model explains **92% of the variance** in period-level speeding rates (R² = 0.920, RMSE = 0.074 on the held-out test set). This level of accuracy confirms the project's central premise: **speeding is structurally determined, not random.** Time of day, road geometry (especially lane width and total cross-section), road classification, and intervention features collectively predict nearly all of the variation in observed speeding rates. The implication is that road design choices made decades ago are still producing measurable safety outcomes today — and that changing those choices will produce measurable improvements.
+Our model, which predicts speeding based on 20 roadway design and environmental factors, explains **92% of the variance** in period-level speeding rates (R² = 0.920, RMSE = 0.074 on the held-out test set). This level of accuracy confirms the project's central premise: **speeding is structurally determined, not random.** Time of day, road geometry (especially width dedicated to car traffic), road classification, and intervention features collectively predict nearly all of the variation in observed speeding rates. The implication is that road design choices made decades ago are still producing measurable safety outcomes today — and that changing those choices will produce measurable improvements.
 
-The partial dependence analysis identifies several actionable patterns. Traffic lane width and curb-to-curb width both independently predict higher speeding, with the width gradient well-supported across the range of Philadelphia's arterial network. Separated bike lanes, traffic calming devices, and sidewalk presence all show negative associations with predicted speeding — each representing an infrastructure class that can be deployed without full roadway reconstruction. The period-of-day effect is the strongest single predictor in the model, but it is not actionable on its own: planners cannot change what time it is. What they can change is the road.
+Pattens identified by our model support several actionable changes. Combined traffic lane width and width per traffic lane both predict higher speeding. Separated bike lanes, traffic calming devices, and sidewalk presence all show negative associations with predicted speeding—each representing an infrastructure class that can be deployed without full roadway reconstruction. Though time-of-day certainly matters for speeding, planners cannot change what time it is—however, they can change the road.
 
 ### Recommendations
 
-**Road redesign prioritization.** Wide (>50 ft curb-to-curb), multi-lane (≥4 lanes), undivided arterials with high predicted nighttime speeding rates and documented KSI crash histories are the strongest candidates for road diet feasibility studies. The model's scenario outputs (Section 6) identify which specific segments show the largest predicted improvement from lane reduction.
+**Road redesign prioritization.** Our results indicate that roadway width dedicated to car traffic lanes is a prime predictor of high speeding. Redeploying this road space to separated pedestrian and bicycling infrastructure may also have add-on effects discouraging speeding. The model's scenario outputs (Section 6) identify which specific segments show the largest predicted improvement from lane reduction.
 
-**Traffic calming deployment.** The model shows the strongest error reduction on calmed segments (RMSE = 0.025 vs. 0.052 for uncalmed) — physical calming is not only effective, it makes speeding behavior predictable. Segments with wide lanes, no existing calming, and high predicted off-peak speeding rates should be prioritized for speed cushion or hump installation.
+**Enforcement targeting.** Model outputs can guide speed camera placement and targeted patrol scheduling at the highest-risk late-night (10 PM–5 AM) segments, particularly on arterials where speeding spikes most steeply at night.
 
-**Bike infrastructure as a safety investment.** The PDP for bike lane status shows a monotonic decrease in predicted speeding from None through Sharrow, Painted, and Separated. Corridors in the monitoring network currently without bike infrastructure represent opportunities where even a painted lane would shift the model's prediction downward — a safety co-benefit of network expansion.
+**Monitoring network expansion.** Additional data on more road segments will increase the accuracy of quantitative predictions and will make evaluation of rarer events such as KSI crashes more tractable. Gathering additional time-of-day variable data, such as hourly parking occupancy and pedestrian traffic data, may improve estimates of outcomes varying by time of day.
 
-**Enforcement targeting.** Model outputs can guide speed camera placement and targeted patrol scheduling at the highest-risk late-night (10 PM–5 AM) segments, particularly on Major Arterials where prediction uncertainty is highest (RMSE = 0.071) and enforcement can supplement structural intervention.
-
-**Monitoring network expansion.** The model's highest prediction errors occur on Major Arterials and roads with 5+ lanes — the road types with the worst KSI records and the fewest monitoring observations. Expanding pneumatic tube deployments to a more representative sample of Philadelphia arterials would simultaneously improve model accuracy and provide direct before-after measurement for completed interventions.
-
-**Before-after evaluation.** As OTIS implements road diets, traffic calming, and bike infrastructure on High Injury Network corridors, the speed monitoring network provides a natural evaluation framework. Longitudinal comparison of modeled vs. observed speeding rates at intervention sites would validate the model's counterfactual predictions and build the evidence base for scaling up the most effective treatments.
+**Before-after evaluation.** As OTIS implements road diets, traffic calming, and bike infrastructure on High Injury Network corridors, the speed monitoring network provides a natural evaluation framework. Longitudinal comparison of modeled vs. observed speeding rates at intervention sites would be a valuable test of the impact of these interventions and build the evidence base for scaling up the most effective treatments.
 
 ---
 
