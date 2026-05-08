@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Kavana Raju">
-<meta name="dcterms.date" content="2026-04-11">
+<meta name="dcterms.date" content="2026-05-08">
 
 <title>Philadelphia Crash Analysis (2020-2024)</title>
 <style>
@@ -146,7 +146,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">April 11, 2026</p>
+      <p class="date">May 8, 2026</p>
     </div>
   </div>
   
@@ -352,94 +352,101 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>philly_crashes <span class="ot">&lt;-</span> philly_crashes <span class="sc">%&gt;%</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Hour of crash (extract from TIME_OF_DAY, fallback to DISPATCH_TM)</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">hour_raw =</span> <span class="fu">case_when</span>(</span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>      <span class="sc">!</span><span class="fu">is.na</span>(TIME_OF_DAY) <span class="sc">~</span> <span class="fu">str_sub</span>(<span class="fu">as.character</span>(TIME_OF_DAY), <span class="dv">1</span>, <span class="dv">2</span>),</span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>      <span class="sc">!</span><span class="fu">is.na</span>(DISPATCH_TM) <span class="sc">~</span> <span class="fu">str_sub</span>(<span class="fu">as.character</span>(DISPATCH_TM), <span class="dv">1</span>, <span class="dv">2</span>),</span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">HOUR_OF_DAY_CLEAN =</span> <span class="fu">as.integer</span>(hour_raw),</span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">HOUR_OF_DAY_CLEAN =</span> <span class="fu">if_else</span>(HOUR_OF_DAY_CLEAN <span class="sc">==</span> <span class="dv">99</span>, <span class="cn">NA_integer_</span>, HOUR_OF_DAY_CLEAN),</span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    <span class="co"># KSI flag (Killed or Suspected Serious Injury)</span></span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">is_ksi =</span> <span class="fu">if_else</span>(FATAL_OR_SUSP_SERIOUS_INJ <span class="sc">==</span> <span class="st">"1"</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="at">missing =</span> <span class="dv">0</span>),</span>
-<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Time periods (peak: 7-10 AM, 4-7 PM)</span></span>
-<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>    <span class="at">time_period =</span> <span class="fu">case_when</span>(</span>
-<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>      <span class="fu">is.na</span>(HOUR_OF_DAY_CLEAN) <span class="sc">~</span> <span class="st">"Unknown"</span>,</span>
-<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>      HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">7</span> <span class="sc">&amp;</span> HOUR_OF_DAY_CLEAN <span class="sc">&lt;</span> <span class="dv">10</span> <span class="sc">~</span> <span class="st">"AM Peak (7-10)"</span>,</span>
-<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>      HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">16</span> <span class="sc">&amp;</span> HOUR_OF_DAY_CLEAN <span class="sc">&lt;</span> <span class="dv">19</span> <span class="sc">~</span> <span class="st">"PM Peak (16-19)"</span>,</span>
-<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>      HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">10</span> <span class="sc">&amp;</span> HOUR_OF_DAY_CLEAN <span class="sc">&lt;</span> <span class="dv">16</span> <span class="sc">~</span> <span class="st">"Midday (10-16)"</span>,</span>
-<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>      HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">19</span> <span class="sc">&amp;</span> HOUR_OF_DAY_CLEAN <span class="sc">&lt;</span> <span class="dv">22</span> <span class="sc">~</span> <span class="st">"Evening (19-22)"</span>,</span>
-<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>      HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">22</span> <span class="sc">|</span> HOUR_OF_DAY_CLEAN <span class="sc">&lt;</span> <span class="dv">7</span> <span class="sc">~</span> <span class="st">"Night/Late (22-7)"</span>,</span>
-<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="st">"Other"</span></span>
-<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>    <span class="at">is_peak =</span> <span class="fu">if_else</span>(</span>
-<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>      time_period <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"AM Peak (7-10)"</span>, <span class="st">"PM Peak (16-19)"</span>), </span>
-<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>      <span class="dv">1</span>, <span class="dv">0</span>, <span class="at">missing =</span> <span class="dv">0</span></span>
-<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Day of week</span></span>
-<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>    <span class="at">day_name =</span> <span class="fu">case_when</span>(</span>
-<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">1</span> <span class="sc">~</span> <span class="st">"Sunday"</span>,</span>
-<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">2</span> <span class="sc">~</span> <span class="st">"Monday"</span>,</span>
-<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">3</span> <span class="sc">~</span> <span class="st">"Tuesday"</span>,</span>
-<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">4</span> <span class="sc">~</span> <span class="st">"Wednesday"</span>,</span>
-<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">5</span> <span class="sc">~</span> <span class="st">"Thursday"</span>,</span>
-<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">6</span> <span class="sc">~</span> <span class="st">"Friday"</span>,</span>
-<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">7</span> <span class="sc">~</span> <span class="st">"Saturday"</span>,</span>
-<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
-<span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a>    <span class="at">is_weekend =</span> <span class="fu">if_else</span>(DAY_OF_WEEK <span class="sc">%in%</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">7</span>), <span class="dv">1</span>, <span class="dv">0</span>, <span class="at">missing =</span> <span class="dv">0</span>),</span>
-<span id="cb10-43"><a href="#cb10-43" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb10-44"><a href="#cb10-44" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Severity labels</span></span>
-<span id="cb10-45"><a href="#cb10-45" aria-hidden="true" tabindex="-1"></a>    <span class="at">severity_label =</span> <span class="fu">case_when</span>(</span>
-<span id="cb10-46"><a href="#cb10-46" aria-hidden="true" tabindex="-1"></a>      MAX_SEVERITY_LEVEL <span class="sc">==</span> <span class="st">"1"</span> <span class="sc">~</span> <span class="st">"Fatal"</span>,</span>
-<span id="cb10-47"><a href="#cb10-47" aria-hidden="true" tabindex="-1"></a>      MAX_SEVERITY_LEVEL <span class="sc">==</span> <span class="st">"2"</span> <span class="sc">~</span> <span class="st">"Suspected Serious Injury"</span>,</span>
-<span id="cb10-48"><a href="#cb10-48" aria-hidden="true" tabindex="-1"></a>      MAX_SEVERITY_LEVEL <span class="sc">==</span> <span class="st">"3"</span> <span class="sc">~</span> <span class="st">"Suspected Minor Injury"</span>,</span>
-<span id="cb10-49"><a href="#cb10-49" aria-hidden="true" tabindex="-1"></a>      MAX_SEVERITY_LEVEL <span class="sc">==</span> <span class="st">"4"</span> <span class="sc">~</span> <span class="st">"Possible Injury"</span>,</span>
-<span id="cb10-50"><a href="#cb10-50" aria-hidden="true" tabindex="-1"></a>      MAX_SEVERITY_LEVEL <span class="sc">==</span> <span class="st">"0"</span> <span class="sc">~</span> <span class="st">"PDO"</span>,</span>
-<span id="cb10-51"><a href="#cb10-51" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="st">"Unknown"</span></span>
-<span id="cb10-52"><a href="#cb10-52" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb10-53"><a href="#cb10-53" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb10-54"><a href="#cb10-54" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Convert flags to integer</span></span>
-<span id="cb10-55"><a href="#cb10-55" aria-hidden="true" tabindex="-1"></a>    <span class="at">PEDESTRIAN =</span> <span class="fu">as.integer</span>(PEDESTRIAN),</span>
-<span id="cb10-56"><a href="#cb10-56" aria-hidden="true" tabindex="-1"></a>    <span class="at">BICYCLE =</span> <span class="fu">as.integer</span>(BICYCLE),</span>
-<span id="cb10-57"><a href="#cb10-57" aria-hidden="true" tabindex="-1"></a>    <span class="at">VULNERABLE_ROAD_USER =</span> <span class="fu">as.integer</span>(VULNERABLE_ROAD_USER),</span>
-<span id="cb10-58"><a href="#cb10-58" aria-hidden="true" tabindex="-1"></a>    <span class="at">SPEEDING_RELATED =</span> <span class="fu">as.integer</span>(SPEEDING_RELATED),</span>
-<span id="cb10-59"><a href="#cb10-59" aria-hidden="true" tabindex="-1"></a>    <span class="at">ILLUMINATION_DARK =</span> <span class="fu">as.integer</span>(ILLUMINATION_DARK),</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Hour of crash</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="at">time_raw =</span> <span class="fu">case_when</span>(</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  <span class="sc">!</span><span class="fu">is.na</span>(DISPATCH_TM) <span class="sc">~</span> <span class="fu">as.character</span>(DISPATCH_TM),</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>  <span class="sc">!</span><span class="fu">is.na</span>(TIME_OF_DAY) <span class="sc">~</span> <span class="fu">as.character</span>(TIME_OF_DAY),</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>  <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>),</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="at">time_clean =</span> <span class="fu">str_pad</span>(time_raw, <span class="at">width =</span> <span class="dv">4</span>, <span class="at">side =</span> <span class="st">"left"</span>, <span class="at">pad =</span> <span class="st">"0"</span>),</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="at">HOUR_OF_DAY_CLEAN =</span> <span class="fu">as.integer</span>(<span class="fu">str_sub</span>(time_clean, <span class="dv">1</span>, <span class="dv">2</span>)),</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a><span class="at">HOUR_OF_DAY_CLEAN =</span> <span class="fu">case_when</span>(</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>  HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">0</span> <span class="sc">&amp;</span> HOUR_OF_DAY_CLEAN <span class="sc">&lt;=</span> <span class="dv">23</span> <span class="sc">~</span> HOUR_OF_DAY_CLEAN,</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>  <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_integer_</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>),</span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># KSI flag (Killed or Suspected Serious Injury)</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">is_ksi =</span> <span class="fu">if_else</span>(FATAL_OR_SUSP_SERIOUS_INJ <span class="sc">==</span> <span class="st">"1"</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="at">missing =</span> <span class="dv">0</span>),</span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Time periods (peak: 7-10 AM, 4-7 PM)</span></span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">time_period =</span> <span class="fu">case_when</span>(</span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>      <span class="fu">is.na</span>(HOUR_OF_DAY_CLEAN) <span class="sc">~</span> <span class="st">"Unknown"</span>,</span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>      HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">7</span> <span class="sc">&amp;</span> HOUR_OF_DAY_CLEAN <span class="sc">&lt;</span> <span class="dv">10</span> <span class="sc">~</span> <span class="st">"AM Peak (7-10)"</span>,</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>      HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">16</span> <span class="sc">&amp;</span> HOUR_OF_DAY_CLEAN <span class="sc">&lt;</span> <span class="dv">19</span> <span class="sc">~</span> <span class="st">"PM Peak (16-19)"</span>,</span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>      HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">10</span> <span class="sc">&amp;</span> HOUR_OF_DAY_CLEAN <span class="sc">&lt;</span> <span class="dv">16</span> <span class="sc">~</span> <span class="st">"Midday (10-16)"</span>,</span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>      HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">19</span> <span class="sc">&amp;</span> HOUR_OF_DAY_CLEAN <span class="sc">&lt;</span> <span class="dv">22</span> <span class="sc">~</span> <span class="st">"Evening (19-22)"</span>,</span>
+<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>      HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">22</span> <span class="sc">|</span> HOUR_OF_DAY_CLEAN <span class="sc">&lt;</span> <span class="dv">7</span> <span class="sc">~</span> <span class="st">"Night/Late (22-7)"</span>,</span>
+<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="st">"Other"</span></span>
+<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a>    <span class="at">is_peak =</span> <span class="fu">if_else</span>(</span>
+<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a>      time_period <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"AM Peak (7-10)"</span>, <span class="st">"PM Peak (16-19)"</span>), </span>
+<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a>      <span class="dv">1</span>, <span class="dv">0</span>, <span class="at">missing =</span> <span class="dv">0</span></span>
+<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Day of week</span></span>
+<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a>    <span class="at">day_name =</span> <span class="fu">case_when</span>(</span>
+<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">1</span> <span class="sc">~</span> <span class="st">"Sunday"</span>,</span>
+<span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">2</span> <span class="sc">~</span> <span class="st">"Monday"</span>,</span>
+<span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">3</span> <span class="sc">~</span> <span class="st">"Tuesday"</span>,</span>
+<span id="cb10-43"><a href="#cb10-43" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">4</span> <span class="sc">~</span> <span class="st">"Wednesday"</span>,</span>
+<span id="cb10-44"><a href="#cb10-44" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">5</span> <span class="sc">~</span> <span class="st">"Thursday"</span>,</span>
+<span id="cb10-45"><a href="#cb10-45" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">6</span> <span class="sc">~</span> <span class="st">"Friday"</span>,</span>
+<span id="cb10-46"><a href="#cb10-46" aria-hidden="true" tabindex="-1"></a>      DAY_OF_WEEK <span class="sc">==</span> <span class="dv">7</span> <span class="sc">~</span> <span class="st">"Saturday"</span>,</span>
+<span id="cb10-47"><a href="#cb10-47" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
+<span id="cb10-48"><a href="#cb10-48" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb10-49"><a href="#cb10-49" aria-hidden="true" tabindex="-1"></a>    <span class="at">is_weekend =</span> <span class="fu">if_else</span>(DAY_OF_WEEK <span class="sc">%in%</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">7</span>), <span class="dv">1</span>, <span class="dv">0</span>, <span class="at">missing =</span> <span class="dv">0</span>),</span>
+<span id="cb10-50"><a href="#cb10-50" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb10-51"><a href="#cb10-51" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Severity labels</span></span>
+<span id="cb10-52"><a href="#cb10-52" aria-hidden="true" tabindex="-1"></a>    <span class="at">severity_label =</span> <span class="fu">case_when</span>(</span>
+<span id="cb10-53"><a href="#cb10-53" aria-hidden="true" tabindex="-1"></a>      MAX_SEVERITY_LEVEL <span class="sc">==</span> <span class="st">"1"</span> <span class="sc">~</span> <span class="st">"Fatal"</span>,</span>
+<span id="cb10-54"><a href="#cb10-54" aria-hidden="true" tabindex="-1"></a>      MAX_SEVERITY_LEVEL <span class="sc">==</span> <span class="st">"2"</span> <span class="sc">~</span> <span class="st">"Suspected Serious Injury"</span>,</span>
+<span id="cb10-55"><a href="#cb10-55" aria-hidden="true" tabindex="-1"></a>      MAX_SEVERITY_LEVEL <span class="sc">==</span> <span class="st">"3"</span> <span class="sc">~</span> <span class="st">"Suspected Minor Injury"</span>,</span>
+<span id="cb10-56"><a href="#cb10-56" aria-hidden="true" tabindex="-1"></a>      MAX_SEVERITY_LEVEL <span class="sc">==</span> <span class="st">"4"</span> <span class="sc">~</span> <span class="st">"Possible Injury"</span>,</span>
+<span id="cb10-57"><a href="#cb10-57" aria-hidden="true" tabindex="-1"></a>      MAX_SEVERITY_LEVEL <span class="sc">==</span> <span class="st">"0"</span> <span class="sc">~</span> <span class="st">"PDO"</span>,</span>
+<span id="cb10-58"><a href="#cb10-58" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="st">"Unknown"</span></span>
+<span id="cb10-59"><a href="#cb10-59" aria-hidden="true" tabindex="-1"></a>    ),</span>
 <span id="cb10-60"><a href="#cb10-60" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb10-61"><a href="#cb10-61" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Road design variables</span></span>
-<span id="cb10-62"><a href="#cb10-62" aria-hidden="true" tabindex="-1"></a>    <span class="at">speed_limit =</span> <span class="fu">as.integer</span>(SPEED_LIMIT),</span>
-<span id="cb10-63"><a href="#cb10-63" aria-hidden="true" tabindex="-1"></a>    <span class="at">lane_count =</span> <span class="fu">case_when</span>(</span>
-<span id="cb10-64"><a href="#cb10-64" aria-hidden="true" tabindex="-1"></a>      LANE_COUNT <span class="sc">==</span> <span class="st">"99"</span> <span class="sc">~</span> <span class="cn">NA_integer_</span>,</span>
-<span id="cb10-65"><a href="#cb10-65" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="fu">as.integer</span>(LANE_COUNT)</span>
-<span id="cb10-66"><a href="#cb10-66" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb10-61"><a href="#cb10-61" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Convert flags to integer</span></span>
+<span id="cb10-62"><a href="#cb10-62" aria-hidden="true" tabindex="-1"></a>    <span class="at">PEDESTRIAN =</span> <span class="fu">as.integer</span>(PEDESTRIAN),</span>
+<span id="cb10-63"><a href="#cb10-63" aria-hidden="true" tabindex="-1"></a>    <span class="at">BICYCLE =</span> <span class="fu">as.integer</span>(BICYCLE),</span>
+<span id="cb10-64"><a href="#cb10-64" aria-hidden="true" tabindex="-1"></a>    <span class="at">VULNERABLE_ROAD_USER =</span> <span class="fu">as.integer</span>(VULNERABLE_ROAD_USER),</span>
+<span id="cb10-65"><a href="#cb10-65" aria-hidden="true" tabindex="-1"></a>    <span class="at">SPEEDING_RELATED =</span> <span class="fu">as.integer</span>(SPEEDING_RELATED),</span>
+<span id="cb10-66"><a href="#cb10-66" aria-hidden="true" tabindex="-1"></a>    <span class="at">ILLUMINATION_DARK =</span> <span class="fu">as.integer</span>(ILLUMINATION_DARK),</span>
 <span id="cb10-67"><a href="#cb10-67" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb10-68"><a href="#cb10-68" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Coordinate validity</span></span>
-<span id="cb10-69"><a href="#cb10-69" aria-hidden="true" tabindex="-1"></a>    <span class="at">has_valid_coords =</span> <span class="sc">!</span><span class="fu">is.na</span>(DEC_LATITUDE) <span class="sc">&amp;</span> <span class="sc">!</span><span class="fu">is.na</span>(DEC_LONGITUDE),</span>
-<span id="cb10-70"><a href="#cb10-70" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb10-71"><a href="#cb10-71" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Clean street name for matching</span></span>
-<span id="cb10-72"><a href="#cb10-72" aria-hidden="true" tabindex="-1"></a>    <span class="at">crash_street_clean =</span> <span class="fu">str_to_upper</span>(<span class="fu">str_trim</span>(STREET_NAME))</span>
-<span id="cb10-73"><a href="#cb10-73" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
-<span id="cb10-74"><a href="#cb10-74" aria-hidden="true" tabindex="-1"></a>  </span>
-<span id="cb10-75"><a href="#cb10-75" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Set factor levels</span></span>
-<span id="cb10-76"><a href="#cb10-76" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb10-77"><a href="#cb10-77" aria-hidden="true" tabindex="-1"></a>    <span class="at">time_period =</span> <span class="fu">factor</span>(</span>
-<span id="cb10-78"><a href="#cb10-78" aria-hidden="true" tabindex="-1"></a>      time_period,</span>
-<span id="cb10-79"><a href="#cb10-79" aria-hidden="true" tabindex="-1"></a>      <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"AM Peak (7-10)"</span>, <span class="st">"Midday (10-16)"</span>, <span class="st">"PM Peak (16-19)"</span>,</span>
-<span id="cb10-80"><a href="#cb10-80" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"Evening (19-22)"</span>, <span class="st">"Night/Late (22-7)"</span>, <span class="st">"Unknown"</span>)</span>
-<span id="cb10-81"><a href="#cb10-81" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb10-82"><a href="#cb10-82" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb10-83"><a href="#cb10-83" aria-hidden="true" tabindex="-1"></a>    <span class="at">severity_label =</span> <span class="fu">factor</span>(</span>
-<span id="cb10-84"><a href="#cb10-84" aria-hidden="true" tabindex="-1"></a>      severity_label,</span>
-<span id="cb10-85"><a href="#cb10-85" aria-hidden="true" tabindex="-1"></a>      <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"Fatal"</span>, <span class="st">"Suspected Serious Injury"</span>, <span class="st">"Suspected Minor Injury"</span>,</span>
-<span id="cb10-86"><a href="#cb10-86" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"Possible Injury"</span>, <span class="st">"PDO"</span>, <span class="st">"Unknown"</span>)</span>
-<span id="cb10-87"><a href="#cb10-87" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb10-88"><a href="#cb10-88" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb10-89"><a href="#cb10-89" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-90"><a href="#cb10-90" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"✓ Feature engineering complete</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb10-68"><a href="#cb10-68" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Road design variables</span></span>
+<span id="cb10-69"><a href="#cb10-69" aria-hidden="true" tabindex="-1"></a>    <span class="at">speed_limit =</span> <span class="fu">as.integer</span>(SPEED_LIMIT),</span>
+<span id="cb10-70"><a href="#cb10-70" aria-hidden="true" tabindex="-1"></a>    <span class="at">lane_count =</span> <span class="fu">case_when</span>(</span>
+<span id="cb10-71"><a href="#cb10-71" aria-hidden="true" tabindex="-1"></a>      LANE_COUNT <span class="sc">==</span> <span class="st">"99"</span> <span class="sc">~</span> <span class="cn">NA_integer_</span>,</span>
+<span id="cb10-72"><a href="#cb10-72" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="fu">as.integer</span>(LANE_COUNT)</span>
+<span id="cb10-73"><a href="#cb10-73" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb10-74"><a href="#cb10-74" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb10-75"><a href="#cb10-75" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Coordinate validity</span></span>
+<span id="cb10-76"><a href="#cb10-76" aria-hidden="true" tabindex="-1"></a>    <span class="at">has_valid_coords =</span> <span class="sc">!</span><span class="fu">is.na</span>(DEC_LATITUDE) <span class="sc">&amp;</span> <span class="sc">!</span><span class="fu">is.na</span>(DEC_LONGITUDE),</span>
+<span id="cb10-77"><a href="#cb10-77" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb10-78"><a href="#cb10-78" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Clean street name for matching</span></span>
+<span id="cb10-79"><a href="#cb10-79" aria-hidden="true" tabindex="-1"></a>    <span class="at">crash_street_clean =</span> <span class="fu">str_to_upper</span>(<span class="fu">str_trim</span>(STREET_NAME))</span>
+<span id="cb10-80"><a href="#cb10-80" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb10-81"><a href="#cb10-81" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb10-82"><a href="#cb10-82" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Set factor levels</span></span>
+<span id="cb10-83"><a href="#cb10-83" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb10-84"><a href="#cb10-84" aria-hidden="true" tabindex="-1"></a>    <span class="at">time_period =</span> <span class="fu">factor</span>(</span>
+<span id="cb10-85"><a href="#cb10-85" aria-hidden="true" tabindex="-1"></a>      time_period,</span>
+<span id="cb10-86"><a href="#cb10-86" aria-hidden="true" tabindex="-1"></a>      <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"AM Peak (7-10)"</span>, <span class="st">"Midday (10-16)"</span>, <span class="st">"PM Peak (16-19)"</span>,</span>
+<span id="cb10-87"><a href="#cb10-87" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"Evening (19-22)"</span>, <span class="st">"Night/Late (22-7)"</span>, <span class="st">"Unknown"</span>)</span>
+<span id="cb10-88"><a href="#cb10-88" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb10-89"><a href="#cb10-89" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb10-90"><a href="#cb10-90" aria-hidden="true" tabindex="-1"></a>    <span class="at">severity_label =</span> <span class="fu">factor</span>(</span>
+<span id="cb10-91"><a href="#cb10-91" aria-hidden="true" tabindex="-1"></a>      severity_label,</span>
+<span id="cb10-92"><a href="#cb10-92" aria-hidden="true" tabindex="-1"></a>      <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"Fatal"</span>, <span class="st">"Suspected Serious Injury"</span>, <span class="st">"Suspected Minor Injury"</span>,</span>
+<span id="cb10-93"><a href="#cb10-93" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"Possible Injury"</span>, <span class="st">"PDO"</span>, <span class="st">"Unknown"</span>)</span>
+<span id="cb10-94"><a href="#cb10-94" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb10-95"><a href="#cb10-95" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb10-96"><a href="#cb10-96" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-97"><a href="#cb10-97" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"✓ Feature engineering complete</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>✓ Feature engineering complete</code></pre>
@@ -476,7 +483,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"("</span>, <span class="fu">round</span>(<span class="fu">mean</span>(<span class="sc">!</span><span class="fu">is.na</span>(philly_crashes<span class="sc">$</span>HOUR_OF_DAY_CLEAN)) <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">1</span>), <span class="st">"%)</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>  Crashes with time data: 34,599 ( 75.9 %)</code></pre>
+<pre><code>  Crashes with time data: 34,600 ( 75.9 %)</code></pre>
 </div>
 <details class="code-fold">
 <summary>Show code</summary>
@@ -549,7 +556,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">HOUR_OF_DAY_CLEAN</td>
-<td style="text-align: right;">10991</td>
+<td style="text-align: right;">10990</td>
 <td style="text-align: right;">24.1</td>
 </tr>
 <tr class="even">
@@ -776,34 +783,81 @@ Final deduplication check: 0 duplicates</code></pre>
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb40"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>crashes_timed <span class="ot">&lt;-</span> philly_crashes <span class="sc">%&gt;%</span></span>
-<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(HOUR_OF_DAY_CLEAN))</span>
-<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a>hourly_summary <span class="ot">&lt;-</span> crashes_timed <span class="sc">%&gt;%</span></span>
-<span id="cb40-5"><a href="#cb40-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(HOUR_OF_DAY_CLEAN) <span class="sc">%&gt;%</span></span>
-<span id="cb40-6"><a href="#cb40-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
-<span id="cb40-7"><a href="#cb40-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">total_crashes =</span> <span class="fu">n</span>(),</span>
-<span id="cb40-8"><a href="#cb40-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">ksi_crashes =</span> <span class="fu">sum</span>(is_ksi),</span>
-<span id="cb40-9"><a href="#cb40-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">ksi_rate =</span> ksi_crashes <span class="sc">/</span> total_crashes <span class="sc">*</span> <span class="dv">100</span>,</span>
-<span id="cb40-10"><a href="#cb40-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">.groups =</span> <span class="st">"drop"</span></span>
-<span id="cb40-11"><a href="#cb40-11" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb40-12"><a href="#cb40-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb40-13"><a href="#cb40-13" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(hourly_summary, <span class="fu">aes</span>(<span class="at">x =</span> HOUR_OF_DAY_CLEAN)) <span class="sc">+</span></span>
-<span id="cb40-14"><a href="#cb40-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>(<span class="fu">aes</span>(<span class="at">y =</span> total_crashes), <span class="at">fill =</span> <span class="st">"#156082"</span>, <span class="at">alpha =</span> <span class="fl">0.7</span>) <span class="sc">+</span></span>
-<span id="cb40-15"><a href="#cb40-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">y =</span> ksi_rate <span class="sc">*</span> <span class="dv">50</span>), <span class="at">color =</span> <span class="st">"#d62728"</span>, <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
-<span id="cb40-16"><a href="#cb40-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="fu">aes</span>(<span class="at">y =</span> ksi_rate <span class="sc">*</span> <span class="dv">50</span>), <span class="at">color =</span> <span class="st">"#d62728"</span>, <span class="at">size =</span> <span class="dv">3</span>) <span class="sc">+</span></span>
-<span id="cb40-17"><a href="#cb40-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(</span>
-<span id="cb40-18"><a href="#cb40-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">"Total Crashes"</span>,</span>
-<span id="cb40-19"><a href="#cb40-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">sec.axis =</span> <span class="fu">sec_axis</span>(<span class="sc">~</span>.<span class="sc">/</span><span class="dv">50</span>, <span class="at">name =</span> <span class="st">"KSI Rate (%)"</span>)</span>
-<span id="cb40-20"><a href="#cb40-20" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
-<span id="cb40-21"><a href="#cb40-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">23</span>) <span class="sc">+</span></span>
-<span id="cb40-22"><a href="#cb40-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
-<span id="cb40-23"><a href="#cb40-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">"Hourly Crash Patterns in Philadelphia (2020-2024)"</span>,</span>
-<span id="cb40-24"><a href="#cb40-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">subtitle =</span> <span class="st">"Total crashes (bars) and KSI rate (line)"</span>,</span>
-<span id="cb40-25"><a href="#cb40-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Hour of Day"</span>,</span>
-<span id="cb40-26"><a href="#cb40-26" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"Peak hours: 7-10 AM, 4-7 PM | KSI = Killed or Suspected Serious Injury"</span></span>
-<span id="cb40-27"><a href="#cb40-27" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
-<span id="cb40-28"><a href="#cb40-28" aria-hidden="true" tabindex="-1"></a>  plotTheme <span class="sc">+</span></span>
-<span id="cb40-29"><a href="#cb40-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">axis.text.x =</span> <span class="fu">element_text</span>(<span class="at">angle =</span> <span class="dv">0</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(HOUR_OF_DAY_CLEAN),</span>
+<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a>         HOUR_OF_DAY_CLEAN <span class="sc">&gt;=</span> <span class="dv">0</span>,</span>
+<span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a>         HOUR_OF_DAY_CLEAN <span class="sc">&lt;=</span> <span class="dv">23</span>)</span>
+<span id="cb40-5"><a href="#cb40-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-6"><a href="#cb40-6" aria-hidden="true" tabindex="-1"></a>hourly_summary <span class="ot">&lt;-</span> crashes_timed <span class="sc">%&gt;%</span></span>
+<span id="cb40-7"><a href="#cb40-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(HOUR_OF_DAY_CLEAN) <span class="sc">%&gt;%</span></span>
+<span id="cb40-8"><a href="#cb40-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
+<span id="cb40-9"><a href="#cb40-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">total_crashes =</span> <span class="fu">n</span>(),</span>
+<span id="cb40-10"><a href="#cb40-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">ksi_crashes =</span> <span class="fu">sum</span>(is_ksi, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb40-11"><a href="#cb40-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">ksi_rate =</span> ksi_crashes <span class="sc">/</span> total_crashes <span class="sc">*</span> <span class="dv">100</span>,</span>
+<span id="cb40-12"><a href="#cb40-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">.groups =</span> <span class="st">"drop"</span></span>
+<span id="cb40-13"><a href="#cb40-13" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb40-14"><a href="#cb40-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-15"><a href="#cb40-15" aria-hidden="true" tabindex="-1"></a>teal_col <span class="ot">&lt;-</span> <span class="st">"#29B8C2"</span></span>
+<span id="cb40-16"><a href="#cb40-16" aria-hidden="true" tabindex="-1"></a>am_fill <span class="ot">&lt;-</span> <span class="st">"#FFD166"</span></span>
+<span id="cb40-17"><a href="#cb40-17" aria-hidden="true" tabindex="-1"></a>pm_fill <span class="ot">&lt;-</span> <span class="st">"#F49621"</span></span>
+<span id="cb40-18"><a href="#cb40-18" aria-hidden="true" tabindex="-1"></a>navy_col <span class="ot">&lt;-</span> <span class="st">"#1B2A4A"</span></span>
+<span id="cb40-19"><a href="#cb40-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-20"><a href="#cb40-20" aria-hidden="true" tabindex="-1"></a>theme_panel <span class="ot">&lt;-</span> <span class="cf">function</span>() {</span>
+<span id="cb40-21"><a href="#cb40-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="fl">10.5</span>) <span class="sc">+</span></span>
+<span id="cb40-22"><a href="#cb40-22" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme</span>(</span>
+<span id="cb40-23"><a href="#cb40-23" aria-hidden="true" tabindex="-1"></a>      <span class="at">panel.border =</span> <span class="fu">element_rect</span>(<span class="at">color =</span> navy_col, <span class="at">fill =</span> <span class="cn">NA</span>, <span class="at">linewidth =</span> <span class="fl">1.3</span>),</span>
+<span id="cb40-24"><a href="#cb40-24" aria-hidden="true" tabindex="-1"></a>      <span class="at">panel.grid.major =</span> <span class="fu">element_line</span>(<span class="at">color =</span> <span class="st">"grey90"</span>, <span class="at">linewidth =</span> <span class="fl">0.3</span>),</span>
+<span id="cb40-25"><a href="#cb40-25" aria-hidden="true" tabindex="-1"></a>      <span class="at">panel.grid.minor =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb40-26"><a href="#cb40-26" aria-hidden="true" tabindex="-1"></a>      <span class="at">plot.title =</span> <span class="fu">element_text</span>(<span class="at">face =</span> <span class="st">"bold"</span>, <span class="at">size =</span> <span class="dv">12</span>, <span class="at">color =</span> navy_col),</span>
+<span id="cb40-27"><a href="#cb40-27" aria-hidden="true" tabindex="-1"></a>      <span class="at">plot.subtitle =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">9</span>, <span class="at">color =</span> <span class="st">"grey40"</span>),</span>
+<span id="cb40-28"><a href="#cb40-28" aria-hidden="true" tabindex="-1"></a>      <span class="at">plot.caption =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="fl">7.5</span>, <span class="at">color =</span> <span class="st">"grey45"</span>, <span class="at">hjust =</span> <span class="dv">0</span>),</span>
+<span id="cb40-29"><a href="#cb40-29" aria-hidden="true" tabindex="-1"></a>      <span class="at">axis.title =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">9</span>, <span class="at">face =</span> <span class="st">"bold"</span>),</span>
+<span id="cb40-30"><a href="#cb40-30" aria-hidden="true" tabindex="-1"></a>      <span class="at">axis.text =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">8</span>),</span>
+<span id="cb40-31"><a href="#cb40-31" aria-hidden="true" tabindex="-1"></a>      <span class="at">axis.ticks =</span> <span class="fu">element_blank</span>()</span>
+<span id="cb40-32"><a href="#cb40-32" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb40-33"><a href="#cb40-33" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb40-34"><a href="#cb40-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-35"><a href="#cb40-35" aria-hidden="true" tabindex="-1"></a>avg_ksi <span class="ot">&lt;-</span> <span class="fu">mean</span>(hourly_summary<span class="sc">$</span>ksi_rate, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb40-36"><a href="#cb40-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-37"><a href="#cb40-37" aria-hidden="true" tabindex="-1"></a>p_vol <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(hourly_summary, <span class="fu">aes</span>(<span class="at">x =</span> HOUR_OF_DAY_CLEAN, <span class="at">y =</span> total_crashes)) <span class="sc">+</span></span>
+<span id="cb40-38"><a href="#cb40-38" aria-hidden="true" tabindex="-1"></a>  <span class="fu">annotate</span>(<span class="st">"rect"</span>, <span class="at">xmin =</span> <span class="fl">6.5</span>, <span class="at">xmax =</span> <span class="fl">10.5</span>, <span class="at">ymin =</span> <span class="dv">0</span>, <span class="at">ymax =</span> <span class="cn">Inf</span>,</span>
+<span id="cb40-39"><a href="#cb40-39" aria-hidden="true" tabindex="-1"></a>           <span class="at">fill =</span> am_fill, <span class="at">alpha =</span> <span class="fl">0.85</span>) <span class="sc">+</span></span>
+<span id="cb40-40"><a href="#cb40-40" aria-hidden="true" tabindex="-1"></a>  <span class="fu">annotate</span>(<span class="st">"rect"</span>, <span class="at">xmin =</span> <span class="fl">15.5</span>, <span class="at">xmax =</span> <span class="fl">19.5</span>, <span class="at">ymin =</span> <span class="dv">0</span>, <span class="at">ymax =</span> <span class="cn">Inf</span>,</span>
+<span id="cb40-41"><a href="#cb40-41" aria-hidden="true" tabindex="-1"></a>           <span class="at">fill =</span> pm_fill, <span class="at">alpha =</span> <span class="fl">0.85</span>) <span class="sc">+</span></span>
+<span id="cb40-42"><a href="#cb40-42" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>(<span class="at">fill =</span> teal_col, <span class="at">width =</span> <span class="fl">0.8</span>, <span class="at">alpha =</span> <span class="fl">0.9</span>) <span class="sc">+</span></span>
+<span id="cb40-43"><a href="#cb40-43" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">22</span>, <span class="dv">2</span>), <span class="at">limits =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">0.5</span>, <span class="fl">23.5</span>)) <span class="sc">+</span></span>
+<span id="cb40-44"><a href="#cb40-44" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">labels =</span> scales<span class="sc">::</span><span class="fu">label_comma</span>(),</span>
+<span id="cb40-45"><a href="#cb40-45" aria-hidden="true" tabindex="-1"></a>                     <span class="at">expand =</span> <span class="fu">expansion</span>(<span class="at">mult =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.08</span>))) <span class="sc">+</span></span>
+<span id="cb40-46"><a href="#cb40-46" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
+<span id="cb40-47"><a href="#cb40-47" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">"Crash Volume by Hour of Day"</span>,</span>
+<span id="cb40-48"><a href="#cb40-48" aria-hidden="true" tabindex="-1"></a>    <span class="at">subtitle =</span> <span class="st">"Orange = AM Peak (7-10), Red = PM Peak (16-19)"</span>,</span>
+<span id="cb40-49"><a href="#cb40-49" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Hour of Day"</span>,</span>
+<span id="cb40-50"><a href="#cb40-50" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">"Number of Crashes"</span>,</span>
+<span id="cb40-51"><a href="#cb40-51" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"Source: PennDOT Crash Database 2020-2024"</span></span>
+<span id="cb40-52"><a href="#cb40-52" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb40-53"><a href="#cb40-53" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_panel</span>()</span>
+<span id="cb40-54"><a href="#cb40-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-55"><a href="#cb40-55" aria-hidden="true" tabindex="-1"></a>p_ksi <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(hourly_summary, <span class="fu">aes</span>(<span class="at">x =</span> HOUR_OF_DAY_CLEAN, <span class="at">y =</span> ksi_rate)) <span class="sc">+</span></span>
+<span id="cb40-56"><a href="#cb40-56" aria-hidden="true" tabindex="-1"></a>  <span class="fu">annotate</span>(<span class="st">"rect"</span>, <span class="at">xmin =</span> <span class="fl">6.5</span>, <span class="at">xmax =</span> <span class="fl">10.5</span>, <span class="at">ymin =</span> <span class="dv">0</span>, <span class="at">ymax =</span> <span class="cn">Inf</span>,</span>
+<span id="cb40-57"><a href="#cb40-57" aria-hidden="true" tabindex="-1"></a>           <span class="at">fill =</span> am_fill, <span class="at">alpha =</span> <span class="fl">0.85</span>) <span class="sc">+</span></span>
+<span id="cb40-58"><a href="#cb40-58" aria-hidden="true" tabindex="-1"></a>  <span class="fu">annotate</span>(<span class="st">"rect"</span>, <span class="at">xmin =</span> <span class="fl">15.5</span>, <span class="at">xmax =</span> <span class="fl">19.5</span>, <span class="at">ymin =</span> <span class="dv">0</span>, <span class="at">ymax =</span> <span class="cn">Inf</span>,</span>
+<span id="cb40-59"><a href="#cb40-59" aria-hidden="true" tabindex="-1"></a>           <span class="at">fill =</span> pm_fill, <span class="at">alpha =</span> <span class="fl">0.85</span>) <span class="sc">+</span></span>
+<span id="cb40-60"><a href="#cb40-60" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept =</span> avg_ksi,</span>
+<span id="cb40-61"><a href="#cb40-61" aria-hidden="true" tabindex="-1"></a>             <span class="at">linetype =</span> <span class="st">"dashed"</span>, <span class="at">color =</span> <span class="st">"grey45"</span>, <span class="at">linewidth =</span> <span class="fl">0.65</span>) <span class="sc">+</span></span>
+<span id="cb40-62"><a href="#cb40-62" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="at">color =</span> teal_col, <span class="at">linewidth =</span> <span class="fl">1.1</span>) <span class="sc">+</span></span>
+<span id="cb40-63"><a href="#cb40-63" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">color =</span> teal_col, <span class="at">size =</span> <span class="fl">2.4</span>) <span class="sc">+</span></span>
+<span id="cb40-64"><a href="#cb40-64" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">22</span>, <span class="dv">2</span>), <span class="at">limits =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">0.5</span>, <span class="fl">23.5</span>)) <span class="sc">+</span></span>
+<span id="cb40-65"><a href="#cb40-65" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">limits =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="cn">NA</span>),</span>
+<span id="cb40-66"><a href="#cb40-66" aria-hidden="true" tabindex="-1"></a>                     <span class="at">expand =</span> <span class="fu">expansion</span>(<span class="at">mult =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.1</span>))) <span class="sc">+</span></span>
+<span id="cb40-67"><a href="#cb40-67" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
+<span id="cb40-68"><a href="#cb40-68" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">"KSI Rate by Hour of Day"</span>,</span>
+<span id="cb40-69"><a href="#cb40-69" aria-hidden="true" tabindex="-1"></a>    <span class="at">subtitle =</span> <span class="fu">paste0</span>(<span class="st">"Dashed line = average KSI rate ("</span>, <span class="fu">round</span>(avg_ksi, <span class="dv">1</span>), <span class="st">"%)"</span>),</span>
+<span id="cb40-70"><a href="#cb40-70" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Hour of Day"</span>,</span>
+<span id="cb40-71"><a href="#cb40-71" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">"KSI Rate (%)"</span>,</span>
+<span id="cb40-72"><a href="#cb40-72" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"KSI = Killed or Suspected Serious Injury"</span></span>
+<span id="cb40-73"><a href="#cb40-73" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb40-74"><a href="#cb40-74" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_panel</span>()</span>
+<span id="cb40-75"><a href="#cb40-75" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-76"><a href="#cb40-76" aria-hidden="true" tabindex="-1"></a>p_vol <span class="sc">+</span> p_ksi</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
 <div>
@@ -865,23 +919,23 @@ Final deduplication check: 0 duplicates</code></pre>
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">Off-Peak Hours</td>
-<td style="text-align: right;">28237</td>
-<td style="text-align: right;">1659</td>
-<td style="text-align: right;">5.9</td>
-<td style="text-align: right;">5713</td>
-<td style="text-align: right;">20.2</td>
-<td style="text-align: right;">3106</td>
-<td style="text-align: right;">11.0</td>
+<td style="text-align: right;">24096</td>
+<td style="text-align: right;">1516</td>
+<td style="text-align: right;">6.3</td>
+<td style="text-align: right;">4954</td>
+<td style="text-align: right;">20.6</td>
+<td style="text-align: right;">2627</td>
+<td style="text-align: right;">10.9</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">Peak Hours</td>
-<td style="text-align: right;">6362</td>
-<td style="text-align: right;">355</td>
-<td style="text-align: right;">5.6</td>
-<td style="text-align: right;">1112</td>
-<td style="text-align: right;">17.5</td>
-<td style="text-align: right;">978</td>
-<td style="text-align: right;">15.4</td>
+<td style="text-align: right;">10504</td>
+<td style="text-align: right;">498</td>
+<td style="text-align: right;">4.7</td>
+<td style="text-align: right;">1871</td>
+<td style="text-align: right;">17.8</td>
+<td style="text-align: right;">1457</td>
+<td style="text-align: right;">13.9</td>
 </tr>
 </tbody>
 </table>
@@ -907,14 +961,14 @@ Chi-squared test for KSI rate difference:</code></pre>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb44"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"  p-value:"</span>, <span class="fu">format.pval</span>(ksi_test<span class="sc">$</span>p.value), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>  p-value: 0.65774 </code></pre>
+<pre><code>  p-value: 0.0000012819 </code></pre>
 </div>
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb46"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"  Statistically significant:"</span>, <span class="fu">if_else</span>(ksi_test<span class="sc">$</span>p.value <span class="sc">&lt;</span> <span class="fl">0.05</span>, <span class="st">"Yes"</span>, <span class="st">"No"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>  Statistically significant: No </code></pre>
+<pre><code>  Statistically significant: Yes </code></pre>
 </div>
 </div>
 <section id="visualization" class="level3">
@@ -1940,8 +1994,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">9.5</td>
 <td style="text-align: right;">357</td>
 <td style="text-align: right;">74</td>
-<td style="text-align: right;">304</td>
-<td style="text-align: right;">1789</td>
+<td style="text-align: right;">480</td>
+<td style="text-align: right;">1613</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">400507</td>
@@ -1951,8 +2005,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">5.8</td>
 <td style="text-align: right;">90</td>
 <td style="text-align: right;">18</td>
-<td style="text-align: right;">63</td>
-<td style="text-align: right;">387</td>
+<td style="text-align: right;">108</td>
+<td style="text-align: right;">342</td>
 </tr>
 <tr class="odd">
 <td style="text-align: right;">763395</td>
@@ -1962,8 +2016,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">1.2</td>
 <td style="text-align: right;">1</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">43</td>
-<td style="text-align: right;">368</td>
+<td style="text-align: right;">81</td>
+<td style="text-align: right;">330</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">400525</td>
@@ -1973,8 +2027,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">6.4</td>
 <td style="text-align: right;">77</td>
 <td style="text-align: right;">15</td>
-<td style="text-align: right;">48</td>
-<td style="text-align: right;">358</td>
+<td style="text-align: right;">76</td>
+<td style="text-align: right;">330</td>
 </tr>
 <tr class="odd">
 <td style="text-align: right;">400471</td>
@@ -1984,8 +2038,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">5.5</td>
 <td style="text-align: right;">123</td>
 <td style="text-align: right;">37</td>
-<td style="text-align: right;">51</td>
-<td style="text-align: right;">334</td>
+<td style="text-align: right;">88</td>
+<td style="text-align: right;">297</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">763393</td>
@@ -1995,8 +2049,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">1.0</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">33</td>
-<td style="text-align: right;">269</td>
+<td style="text-align: right;">84</td>
+<td style="text-align: right;">218</td>
 </tr>
 <tr class="odd">
 <td style="text-align: right;">423293</td>
@@ -2006,8 +2060,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">2.3</td>
 <td style="text-align: right;">1</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">22</td>
-<td style="text-align: right;">242</td>
+<td style="text-align: right;">53</td>
+<td style="text-align: right;">211</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">661200</td>
@@ -2017,8 +2071,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">1.2</td>
 <td style="text-align: right;">1</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">25</td>
-<td style="text-align: right;">234</td>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">195</td>
 </tr>
 <tr class="odd">
 <td style="text-align: right;">740191</td>
@@ -2028,8 +2082,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">3.3</td>
 <td style="text-align: right;">12</td>
 <td style="text-align: right;">1</td>
-<td style="text-align: right;">33</td>
-<td style="text-align: right;">181</td>
+<td style="text-align: right;">46</td>
+<td style="text-align: right;">168</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">442144</td>
@@ -2039,8 +2093,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">0.5</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">28</td>
-<td style="text-align: right;">177</td>
+<td style="text-align: right;">48</td>
+<td style="text-align: right;">157</td>
 </tr>
 <tr class="odd">
 <td style="text-align: right;">880001</td>
@@ -2050,8 +2104,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">4.8</td>
 <td style="text-align: right;">11</td>
 <td style="text-align: right;">5</td>
-<td style="text-align: right;">23</td>
-<td style="text-align: right;">164</td>
+<td style="text-align: right;">52</td>
+<td style="text-align: right;">135</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">422385</td>
@@ -2061,8 +2115,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">14.9</td>
 <td style="text-align: right;">4</td>
 <td style="text-align: right;">6</td>
-<td style="text-align: right;">30</td>
-<td style="text-align: right;">144</td>
+<td style="text-align: right;">52</td>
+<td style="text-align: right;">122</td>
 </tr>
 <tr class="odd">
 <td style="text-align: right;">420518</td>
@@ -2072,8 +2126,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">4.7</td>
 <td style="text-align: right;">26</td>
 <td style="text-align: right;">19</td>
-<td style="text-align: right;">19</td>
-<td style="text-align: right;">152</td>
+<td style="text-align: right;">36</td>
+<td style="text-align: right;">135</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">240167</td>
@@ -2083,8 +2137,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">6.7</td>
 <td style="text-align: right;">30</td>
 <td style="text-align: right;">6</td>
-<td style="text-align: right;">24</td>
-<td style="text-align: right;">139</td>
+<td style="text-align: right;">33</td>
+<td style="text-align: right;">130</td>
 </tr>
 <tr class="odd">
 <td style="text-align: right;">522396</td>
@@ -2094,8 +2148,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">2.5</td>
 <td style="text-align: right;">1</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">15</td>
-<td style="text-align: right;">148</td>
+<td style="text-align: right;">33</td>
+<td style="text-align: right;">130</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">522397</td>
@@ -2105,8 +2159,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">3.7</td>
 <td style="text-align: right;">1</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">20</td>
-<td style="text-align: right;">142</td>
+<td style="text-align: right;">28</td>
+<td style="text-align: right;">134</td>
 </tr>
 <tr class="odd">
 <td style="text-align: right;">400376</td>
@@ -2116,8 +2170,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">4.5</td>
 <td style="text-align: right;">19</td>
 <td style="text-align: right;">7</td>
-<td style="text-align: right;">21</td>
-<td style="text-align: right;">133</td>
+<td style="text-align: right;">35</td>
+<td style="text-align: right;">119</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">240054</td>
@@ -2127,8 +2181,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">6.5</td>
 <td style="text-align: right;">18</td>
 <td style="text-align: right;">3</td>
-<td style="text-align: right;">17</td>
-<td style="text-align: right;">136</td>
+<td style="text-align: right;">28</td>
+<td style="text-align: right;">125</td>
 </tr>
 <tr class="odd">
 <td style="text-align: right;">442184</td>
@@ -2138,8 +2192,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">3.4</td>
 <td style="text-align: right;">2</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">11</td>
-<td style="text-align: right;">137</td>
+<td style="text-align: right;">30</td>
+<td style="text-align: right;">118</td>
 </tr>
 <tr class="even">
 <td style="text-align: right;">323335</td>
@@ -2149,8 +2203,8 @@ Top 20 highest-crash segments:</code></pre>
 <td style="text-align: right;">4.1</td>
 <td style="text-align: right;">29</td>
 <td style="text-align: right;">15</td>
-<td style="text-align: right;">29</td>
-<td style="text-align: right;">117</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">104</td>
 </tr>
 </tbody>
 </table>

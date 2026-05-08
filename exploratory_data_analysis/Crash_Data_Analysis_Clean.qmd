@@ -179,14 +179,21 @@ print(table(philly_crashes$CRASH_YEAR))
 ```{r feature-engineering}
 philly_crashes <- philly_crashes %>%
   mutate(
-    # Hour of crash (extract from TIME_OF_DAY, fallback to DISPATCH_TM)
-    hour_raw = case_when(
-      !is.na(TIME_OF_DAY) ~ str_sub(as.character(TIME_OF_DAY), 1, 2),
-      !is.na(DISPATCH_TM) ~ str_sub(as.character(DISPATCH_TM), 1, 2),
-      TRUE ~ NA_character_
-    ),
-    HOUR_OF_DAY_CLEAN = as.integer(hour_raw),
-    HOUR_OF_DAY_CLEAN = if_else(HOUR_OF_DAY_CLEAN == 99, NA_integer_, HOUR_OF_DAY_CLEAN),
+    # Hour of crash
+time_raw = case_when(
+  !is.na(DISPATCH_TM) ~ as.character(DISPATCH_TM),
+  !is.na(TIME_OF_DAY) ~ as.character(TIME_OF_DAY),
+  TRUE ~ NA_character_
+),
+
+time_clean = str_pad(time_raw, width = 4, side = "left", pad = "0"),
+
+HOUR_OF_DAY_CLEAN = as.integer(str_sub(time_clean, 1, 2)),
+
+HOUR_OF_DAY_CLEAN = case_when(
+  HOUR_OF_DAY_CLEAN >= 0 & HOUR_OF_DAY_CLEAN <= 23 ~ HOUR_OF_DAY_CLEAN,
+  TRUE ~ NA_integer_
+),
     
     # KSI flag (Killed or Suspected Serious Injury)
     is_ksi = if_else(FATAL_OR_SUSP_SERIOUS_INJ == "1", 1, 0, missing = 0),
@@ -449,34 +456,81 @@ cat("  Total linked:", format(sum(philly_crashes$has_road_link), big.mark = ",")
 
 ```{r hourly-patterns, fig.width=10, fig.height=6}
 crashes_timed <- philly_crashes %>%
-  filter(!is.na(HOUR_OF_DAY_CLEAN))
+  filter(!is.na(HOUR_OF_DAY_CLEAN),
+         HOUR_OF_DAY_CLEAN >= 0,
+         HOUR_OF_DAY_CLEAN <= 23)
 
 hourly_summary <- crashes_timed %>%
   group_by(HOUR_OF_DAY_CLEAN) %>%
   summarise(
     total_crashes = n(),
-    ksi_crashes = sum(is_ksi),
+    ksi_crashes = sum(is_ksi, na.rm = TRUE),
     ksi_rate = ksi_crashes / total_crashes * 100,
     .groups = "drop"
   )
 
-ggplot(hourly_summary, aes(x = HOUR_OF_DAY_CLEAN)) +
-  geom_col(aes(y = total_crashes), fill = "#156082", alpha = 0.7) +
-  geom_line(aes(y = ksi_rate * 50), color = "#d62728", linewidth = 1.2) +
-  geom_point(aes(y = ksi_rate * 50), color = "#d62728", size = 3) +
-  scale_y_continuous(
-    name = "Total Crashes",
-    sec.axis = sec_axis(~./50, name = "KSI Rate (%)")
-  ) +
-  scale_x_continuous(breaks = 0:23) +
+teal_col <- "#29B8C2"
+am_fill <- "#FFD166"
+pm_fill <- "#F49621"
+navy_col <- "#1B2A4A"
+
+theme_panel <- function() {
+  theme_minimal(base_size = 10.5) +
+    theme(
+      panel.border = element_rect(color = navy_col, fill = NA, linewidth = 1.3),
+      panel.grid.major = element_line(color = "grey90", linewidth = 0.3),
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(face = "bold", size = 12, color = navy_col),
+      plot.subtitle = element_text(size = 9, color = "grey40"),
+      plot.caption = element_text(size = 7.5, color = "grey45", hjust = 0),
+      axis.title = element_text(size = 9, face = "bold"),
+      axis.text = element_text(size = 8),
+      axis.ticks = element_blank()
+    )
+}
+
+avg_ksi <- mean(hourly_summary$ksi_rate, na.rm = TRUE)
+
+p_vol <- ggplot(hourly_summary, aes(x = HOUR_OF_DAY_CLEAN, y = total_crashes)) +
+  annotate("rect", xmin = 6.5, xmax = 10.5, ymin = 0, ymax = Inf,
+           fill = am_fill, alpha = 0.85) +
+  annotate("rect", xmin = 15.5, xmax = 19.5, ymin = 0, ymax = Inf,
+           fill = pm_fill, alpha = 0.85) +
+  geom_col(fill = teal_col, width = 0.8, alpha = 0.9) +
+  scale_x_continuous(breaks = seq(0, 22, 2), limits = c(-0.5, 23.5)) +
+  scale_y_continuous(labels = scales::label_comma(),
+                     expand = expansion(mult = c(0, 0.08))) +
   labs(
-    title = "Hourly Crash Patterns in Philadelphia (2020-2024)",
-    subtitle = "Total crashes (bars) and KSI rate (line)",
+    title = "Crash Volume by Hour of Day",
+    subtitle = "Orange = AM Peak (7-10), Red = PM Peak (16-19)",
     x = "Hour of Day",
-    caption = "Peak hours: 7-10 AM, 4-7 PM | KSI = Killed or Suspected Serious Injury"
+    y = "Number of Crashes",
+    caption = "Source: PennDOT Crash Database 2020-2024"
   ) +
-  plotTheme +
-  theme(axis.text.x = element_text(angle = 0))
+  theme_panel()
+
+p_ksi <- ggplot(hourly_summary, aes(x = HOUR_OF_DAY_CLEAN, y = ksi_rate)) +
+  annotate("rect", xmin = 6.5, xmax = 10.5, ymin = 0, ymax = Inf,
+           fill = am_fill, alpha = 0.85) +
+  annotate("rect", xmin = 15.5, xmax = 19.5, ymin = 0, ymax = Inf,
+           fill = pm_fill, alpha = 0.85) +
+  geom_hline(yintercept = avg_ksi,
+             linetype = "dashed", color = "grey45", linewidth = 0.65) +
+  geom_line(color = teal_col, linewidth = 1.1) +
+  geom_point(color = teal_col, size = 2.4) +
+  scale_x_continuous(breaks = seq(0, 22, 2), limits = c(-0.5, 23.5)) +
+  scale_y_continuous(limits = c(0, NA),
+                     expand = expansion(mult = c(0, 0.1))) +
+  labs(
+    title = "KSI Rate by Hour of Day",
+    subtitle = paste0("Dashed line = average KSI rate (", round(avg_ksi, 1), "%)"),
+    x = "Hour of Day",
+    y = "KSI Rate (%)",
+    caption = "KSI = Killed or Suspected Serious Injury"
+  ) +
+  theme_panel()
+
+p_vol + p_ksi
 ```
 
 ---
