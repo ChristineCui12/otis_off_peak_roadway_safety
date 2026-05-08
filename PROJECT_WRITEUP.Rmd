@@ -223,6 +223,12 @@ Evening hours (8 PM–3 AM) represent only **29% of the day** and carry just **1
 
 The hourly KSI-to-demand ratio tells the same story at finer resolution: during overnight hours, the KSI share (orange) rises sharply while the traffic share (black) falls — creating the inverse pattern that defines the off-peak paradox. The divergence is most extreme between midnight and 7 AM, when pedestrian KSI rates are 3–5× higher per unit of traffic than during midday hours.
 
+```{r ksi-hourly-intro, echo=FALSE, out.width="100%"}
+knitr::include_graphics(
+  "exploratory_data_analysis/Crash_Data_Analysis_Clean_files/figure-html/hourly-patterns-1.png"
+)
+```
+
 <div class="callout callout-orange">
 *"LOS A is dangerous for vulnerable road users because it allows for unmetered speeding by drivers."*
 <br>— OTIS Office of Multimodal Planning, TESC 2024
@@ -232,7 +238,7 @@ The hourly KSI-to-demand ratio tells the same story at finer resolution: during 
 
 The off-peak paradox is not simply about fewer cars at night. It is about what wide, multi-lane roads do to driver cognition and behavior. Research by Tice et al. (2021), using naturalistic driving data from 200 urban locations, found that corridor width is the single strongest predictor of 85th percentile speed (r = 0.686) — stronger than speed limits, land use, or neighborhood density.
 
-The mechanism operates through **driver attention**. Wide corridors with few visual interruptions trigger a near-automatic driving state — the same attentional mode activated on highways — in which drivers perceive minimal risk and unconsciously increase speed. At a corridor width of 50 feet (the cross-section of a typical 4-lane undivided arterial), **80% of drivers are potentially multitasking**:
+The mechanism operates through **driver attention**. Wide corridors with few visual interruptions trigger a near-automatic driving state — the same attentional mode activated on highways — in which drivers perceive minimal risk and unconsciously increase speed.
 
 The same study found that at speeds above 45 mph, drivers cannot reliably decode facial expressions — meaning they may not register a pedestrian's presence before passing them. This is not distraction or recklessness; it is the predictable neurological response to a road environment designed for highway-speed throughput.
 
@@ -407,34 +413,6 @@ knitr::include_graphics(
 ### 2.2.2 The Off-Peak Paradox: Fewer Crashes, More Deaths
 
 This is the empirical heart of the project. When crash counts and KSI rates are plotted by hour of day, a striking inversion emerges:
-
-```{r hourly-patterns, eval=FALSE}
-hourly_summary <- philly_crashes %>%
-  filter(!is.na(HOUR_OF_DAY)) %>%
-  group_by(HOUR_OF_DAY) %>%
-  summarise(
-    total_crashes = n(),
-    ksi_crashes   = sum(is_ksi),
-    ksi_rate      = ksi_crashes / total_crashes * 100
-  )
-
-ggplot(hourly_summary, aes(x = HOUR_OF_DAY)) +
-  geom_col(aes(y = total_crashes), fill = palette_blue, alpha = 0.7) +
-  geom_line(aes(y = ksi_rate * 50), color = palette_orange,
-            linewidth = 1.4) +
-  geom_point(aes(y = ksi_rate * 50), color = palette_orange, size = 2.5) +
-  scale_y_continuous(
-    name     = "Total Crashes",
-    sec.axis = sec_axis(~ . / 50, name = "KSI Rate (%)")
-  ) +
-  scale_x_continuous(breaks = 0:23) +
-  labs(
-    title    = "Hourly Crash Patterns in Philadelphia (2020–2024)",
-    subtitle = "Crash volume (bars) vs. KSI rate (line) — the paradox made visible",
-    x        = "Hour of Day",
-    caption  = "Peak hours: 7–10 AM, 4–7 PM | KSI = Killed or Suspected Serious Injury"
-  )
-```
 
 ```{r hourly-patterns-img, echo=FALSE, out.width="100%"}
 knitr::include_graphics(
@@ -1515,7 +1493,7 @@ performance %>%
   kbl(align = c("l","c","c","c"), escape = FALSE) %>%
   kable_classic(full_width = FALSE, html_font = "Lato") %>%
   kable_styling(font_size = 14) %>%
-  row_spec(2, bold = TRUE, background = "#f0f6fa") %>%
+  row_spec(1, bold = TRUE, background = "#f0f6fa") %>%
   add_footnote("Test-set metrics from last_fit() on the 25% stratified holdout. Seed = 2718.",
                notation = "none")
 ```
@@ -1778,37 +1756,6 @@ The predicted speeding percentage across different road types differs starkly by
 
 </div><div class="pdp-section">
 
-#### Bike Lane Status
-
-```{r pdp-bike, message=FALSE, warning=FALSE, fig.cap="Separated bike lanes show the strongest speed-reducing association."}
-pdp_bike <- model_profile(explainer, type = "partial",
-                           variables = "bike_lane_status", N = NULL)
-
-p_bike <- as_tibble(pdp_bike$agr_profiles) %>%
-  mutate(`_x_` = fct_relevel(`_x_`, "None", "Sharrow", "Painted", "Separated")) %>%
-  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
-  geom_line(linewidth = 1.3, color = palette_blue) +
-  scale_y_continuous(labels = label_percent(), limits = c(0, NA),
-                     expand = expansion(mult = c(0, 0.2))) +
-  labs(title = "Predicted speeding by bike lane status",
-       y = "Predicted speeding rate", x = "Bike lane type")
-
-p_bike_bar <- ggplot(modeling_data, aes(x = fct_relevel(bike_lane_status,
-                        "None","Sharrow","Painted","Separated"))) +
-  geom_bar(fill = palette_blue, alpha = 0.25, color = palette_blue) +
-  scale_y_reverse() +
-  theme_minimal() +
-  theme(axis.title.y = element_blank(), axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(), panel.grid = element_blank()) +
-  labs(x = "Distribution of modeling data")
-
-p_bike / p_bike_bar + plot_layout(heights = c(4, 1))
-```
-
-The model estimates a potential modest impact of separated bike lanes on speeding. Interestingly, sharrows, if anything, are predicted to increase speeding (though the size of the effect is small compared to the average model error).
-
-</div><div class="pdp-section">
-
 #### Sidewalk Status
 
 ```{r pdp-sidewalk, message=FALSE, warning=FALSE, fig.cap="Streets with sidewalks on both sides have lower predicted speeding, consistent with the literature on social friction and perceived enclosure."}
@@ -1919,7 +1866,7 @@ list(
   </div>
   <div class="stat-box">
     <span class="stat-num">0.025</span>
-    <span class="stat-label">RMSE on calmed segments<br><em>lowest-error subgroup</em></span>
+    <span class="stat-label">RMSE on calmed segments</span>
   </div>
   <div class="stat-box">
     <span class="stat-num-orange">0.055</span>
@@ -1927,7 +1874,7 @@ list(
   </div>
 </div>
 
-Generally, subgroups of data do not show markedly different error levels compared to the dataset as a whole (~7 percentage points RMSE). However, roadways with characteristics conducive to high speeding (Major Arterials, 5+ lanes, off-peak night) are also the hardest to predict. Partly, this is because of underlying heterogeneity in these groups (for example, Major Arterials include both narrow roads like 34th St and wide roads like Columbus Blvd). The model also tends to underestimate night-time speeding along arterials, which often see very high speeding percentage in reality. This is an important limitation of our model because this population of roadways is also the focus of our use case.
+Generally, subgroups of data do not show markedly different error levels compared to the dataset as a whole (~7 percentage points RMSE). However, roadways with characteristics conducive to high speeding (Major Arterials, 5+ lanes, off-peak night) are also the hardest to predict. Partly, this is because of underlying heterogeneity in these groups (for example, Major Arterials include both narrow roads like 34th St and wide roads like Columbus Blvd). The model also tends to underestimate night-time speeding along arterials, which often see very high speeding percentage in reality. This is an important limitation of our model because this population of roadways is also the focus of our use case. The low RMSE on traffic-calmed segments (0.025) reflects that these segments form a more homogeneous, predictable subgroup — it should not be read as independent confirmation that traffic calming reduces speeding; that evidence comes from the PDP analysis above.
 
 ---
 
