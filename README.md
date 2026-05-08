@@ -9,7 +9,7 @@ A predictive modeling and planning tool built for the **City of Philadelphia's O
 
 ## Live Application
 
-**[Launch the Roadway Safety Explorer →](https://chihyunkim.github.io/otis_off_peak_roadway_safety/html/landing.html)**
+**[Launch the Roadway Safety Explorer →](https://chihyunkim.github.io/otis_off_peak_roadway_safety/landing.html)**
 
 Explore predicted speeding risk across Philadelphia's road network, simulate the effect of road design interventions, and compare outcomes by time of day.
 
@@ -67,11 +67,10 @@ A web application allows OTIS planners to explore risk and evaluate intervention
 ├── joins/                         # Spatial join and feature engineering scripts
 ├── data_check/                    # Data validation scripts
 │
-├── html/                          # Web app pages (GitHub Pages)
-│   ├── landing.html               # App landing page
-│   ├── index.html                 # Interactive risk map
-│   ├── table.html                 # Segment data table
-│   └── about.html                 # Methodology
+├── landing.html                   # App landing page (GitHub Pages)
+├── index.html                     # Interactive risk map
+├── table.html                     # Segment data table
+├── about.html                     # Methodology
 ├── css/                           # Web app stylesheets
 ├── js/                            # Web app logic
 ├── assets/                        # Web app data (GeoJSON, scenario CSV)
