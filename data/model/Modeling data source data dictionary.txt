@@ -1,0 +1,72 @@
+# Modeling data source data dictionary
+
+## Introduction
+
+All of the values are at the street segment level, with separate rows by time of day ('speed_measurement_period'), for each day in which speed was measured at that segment.
+
+Not all variables are used directly in the model, but are included for reference purposes. For the full list of modeling variables, see the end of this document.
+
+This document refers to modeling data source version 9.
+
+## Variable descriptions
+
+seg_id: Segment ID taken from the Street Centerlines dataset on OpenDataPhilly
+all_speeding_percent:  Percentage of traffic traveling over the speed limit
+high_speeding_percent:  Percentage of traffic traveling 10mph or over the speed limit
+volume_total:  Traffic volume (also, denominator for speeding percentages)
+speed_measurement_road:  Name of road where speed measured
+speed_measurement_month:  Month when speed measured (coded as two-digit string, represents time-of-year)
+speed_measurement_day_of_week:  Whether speed was measured weekday or weekend
+speed_measurement_period:  Time when speed measured. Night off-peak (20:00-06:00), morning peak (07:00-10:00), midday off-peak (11:00-15:00), evening peak (16:00-19:00)
+speed_limit:  Speed limit where speed measured
+traffic_direction:  Traffic direction one-way or both ways
+lanes:  Number of traffic lanes; manually verified
+divided_roadway:  Whether the segment has a physical divider between sets of lanes; manually verified
+parking:  On-street parking status (Both sides, One side, None); manually verified
+sidewalk_status:  Sidewalk presence (Both sides, One side, None); manually verified
+bike_lane_status:  Presence of bike infrastructure (Sharrow, Painted, Separated, None); manually verified
+curb_to_curb_width:  Width of entire roadway from curb to curb (ft); manually verified
+traffic_lanes_width:  Summed width of roadway dedicated to traffic lanes (ft); manually verified
+width_per_traffic_lane:  Average width per lane (ft/lane)
+shoulder_width:  Summed width of shoulders and other paved non-physically separated space not intended for travel or parking (ft); manually verified
+wide_shoulder:  Binary variable; shoulder_width 8ft or more
+crashes:  Count of crashes between 2020-2024 on the segment, for the indicated time of day
+ksi_rate:  Percentage of crashes reported in previous variable which resulted in death or serious injury
+length:  Length of roadway segment (ft) from Street Centerlines dataset
+arterial_type_dvrpc:  Arterial type from DVRPC's Arterial Typology report
+road_classification_city:  Roadway classification taken from Street Centerlines dataset
+road_classification_fhwa:  Roadway classification taken from PennDOT RMS dataset
+count_transit:  The total number of transit stops (e.g., bus stops) assigned to the roadway segment. This is calculated using a nearest-neighbor spatial join to snap stop point features directly to the closest street centerline.
+traffic_calming:  Whether any traffic calming devices (e.g., speed cushions) is present along the roadway segment. This is calculated using a nearest-neighbor spatial join to snap device point features directly to the closest street centerline.
+count_intersection_ctrl:  The number of intersection control devices (e.g., stop signs, traffic signals) associated with the roadway segment. Because these are node-based features located at physical corners, this is calculated by intersecting the street segment with a 30-foot buffer around the device coordinate to accurately capture all adjacent intersecting road segments.
+parcel_density: Density of parcels fronting onto segment, based on street address recorded by Office of Property Assessments (parcels/ft)
+
+## Modeling variables
+
+Target variable: 
+  all_speeding_percent
+
+Predictor variables:
+  speed_measurement_period, 
+  road_classification_city,
+  volume_total,         
+  speed_measurement_month,
+  speed_measurement_day_of_week,
+  speed_limit,
+  traffic_direction,          
+  divided_roadway,
+  parking,
+  sidewalk_status, 
+  bike_lane_status,
+  parcel_density,
+  count_transit,
+  traffic_calming,
+  count_intersection_ctrl,
+  curb_to_curb_width,
+  traffic_lanes_width,
+  width_per_traffic_lane,
+  wide_shoulder,
+  length
+  
+  
+  

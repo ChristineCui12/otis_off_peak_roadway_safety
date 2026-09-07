@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>24h Roadway Safety Explorer | Philadelphia</title>
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <link rel="apple-touch-icon" href="assets/icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/landing.css" />
+</head>
+<body class="landing-page">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="city-seal" aria-hidden="true">
+        <img src="assets/icon.png" alt="App logo" width="38" height="38" style="object-fit:contain;display:block;" />
+      </div>
+      <div class="header-title">
+        <div class="header-dept">Peak vs. Off-Peak Speed Risk</div>
+        <h1 class="header-app-name">Roadway Safety Explorer</h1>
+      </div>
+    </div>
+    <nav class="header-nav" aria-label="Main navigation">
+      <a href="landing.html" class="nav-link active">Home</a>
+      <a href="index.html"   class="nav-link">Map</a>
+      <a href="table.html"   class="nav-link">Data Table</a>
+      <a href="about.html"   class="nav-link">About</a>
+      <a href="https://github.com/chihyunkim/otis_off_peak_roadway_safety" class="nav-link nav-link--icon" target="_blank" rel="noopener" aria-label="GitHub repository">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </nav>
+  </header>
+
+  <main class="landing-main">
+
+    <!-- ── HERO ────────────────────────────────────────────────────── -->
+    <section class="landing-hero">
+      <!-- ── Stats panel (left column) ── -->
+      <div class="hero-stats-panel" aria-label="Model performance metrics">
+        <div class="hero-stat-row">
+          <div class="hero-stat-value">0.92</div>
+          <div class="hero-stat-label">Model R²</div>
+        </div>
+        <div class="hero-stat-row">
+          <div class="hero-stat-value">4%</div>
+          <div class="hero-stat-label">Mean Absolute Error</div>
+        </div>
+        <div class="hero-stat-row">
+          <div class="hero-stat-value">7%</div>
+          <div class="hero-stat-label">Root-Mean-Square Error</div>
+        </div>
+        <div class="hero-stat-row">
+          <div class="hero-stat-value">9,049</div>
+          <div class="hero-stat-label">Observations in model</div>
+        </div>
+      </div>
+
+      <div class="hero-content">
+        <div class="hero-eyebrow">Philadelphia · Road Safety Research</div>
+        <h2 class="hero-title">
+          <span class="hero-title-line">When Peak Traffic Fades,</span><br/><span class="hero-title-line">What Happens to Speed?</span>
+        </h2>
+        <p class="hero-body">
+          When peak-hour congestion clears, speeds can rise sharply on Philadelphia's roads.
+          This tool maps predicted speeding risk for monitored road segments across all four
+          time periods: morning peak, midday off-peak, evening peak, and night off-peak.
+          It also lets planners simulate how road design changes would shift that risk.
+        </p>
+        <div class="hero-actions">
+          <a href="index.html" class="btn-hero btn-hero--primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            Explore the Map
+          </a>
+          <a href="table.html" class="btn-hero btn-hero--outline">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+              <path d="M3 3h18v4H3zM3 10h18v4H3zM3 17h18v4H3z"/>
+            </svg>
+            View Data Table
+          </a>
+        </div>
+      </div>
+
+      <!-- ── Curved bottom transition ── -->
+      <div class="hero-curve" aria-hidden="true">
+        <svg viewBox="0 0 1440 64" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0,64 C360,0 1080,0 1440,64 L1440,64 L0,64 Z" fill="#f0f0f0"/>
+        </svg>
+      </div>
+    </section>
+
+    <!-- ── HOW IT WORKS ──────────────────────────────────────────────── -->
+    <section class="how-section">
+      <h2 class="section-title">How the Model Works</h2>
+      <div class="how-steps">
+        <div class="how-step">
+          <div class="how-step-num">1</div>
+          <h4 class="how-step-title">Speed observations</h4>
+          <p class="how-step-body">DVRPC sensors record the share of vehicles exceeding the speed limit each hour on monitored segments.</p>
+        </div>
+        <div class="how-step-arrow" aria-hidden="true">&#8594;</div>
+        <div class="how-step">
+          <div class="how-step-num">2</div>
+          <h4 class="how-step-title">Feature engineering</h4>
+          <p class="how-step-body">Road geometry, classification, environment, traffic volume, crash history, and time-of-day are compiled per segment.</p>
+        </div>
+        <div class="how-step-arrow" aria-hidden="true">&#8594;</div>
+        <div class="how-step">
+          <div class="how-step-num">3</div>
+          <h4 class="how-step-title">Random Forest model</h4>
+          <p class="how-step-body">A ranger-based Random Forest (R²&nbsp;=&nbsp;0.92, MAE&nbsp;=&nbsp;4.2%) learns the relationship between road features and speeding rate.</p>
+        </div>
+        <div class="how-step-arrow" aria-hidden="true">&#8594;</div>
+        <div class="how-step">
+          <div class="how-step-num">4</div>
+          <h4 class="how-step-title">Intervention prediction</h4>
+          <p class="how-step-body">Select pre-computed intervention scenarios in the panel to see the model's estimated change in off-peak speeding for any segment.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── FEATURE CARDS ─────────────────────────────────────────────── -->
+    <section class="feature-section">
+      <h2 class="section-title">What This Tool Does</h2>
+      <div class="feature-grid">
+
+        <a href="index.html?tour=map" class="feature-card feature-card--link">
+          <div class="feature-icon feature-icon--blue">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+            </svg>
+          </div>
+          <h3 class="feature-title">Interactive Risk Map</h3>
+          <p class="feature-body">
+            Every Philadelphia road segment colored by predicted off-peak speeding risk.
+            Toggle between four time periods and switch views between predicted speeding,
+            road class, speed limit, or number of lanes.
+          </p>
+          <span class="feature-cta">Explore the Map &rarr;</span>
+        </a>
+
+        <a href="index.html?tour=simulator&seg=520117" class="feature-card feature-card--link">
+          <div class="feature-icon feature-icon--orange">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
+              <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+              <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/>
+              <line x1="17" y1="16" x2="23" y2="16"/>
+            </svg>
+          </div>
+          <h3 class="feature-title">Intervention Simulator</h3>
+          <p class="feature-body">
+            Click any segment to open its detail panel. Select intervention types — lane
+            diet, bike lanes, traffic calming, parking changes — and compare the model's
+            predicted speeding before and after each scenario.
+          </p>
+          <span class="feature-cta">Try an Intervention &rarr;</span>
+        </a>
+
+        <a href="table.html" class="feature-card feature-card--link">
+          <div class="feature-icon feature-icon--green">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <h3 class="feature-title">Segment Data Table</h3>
+          <p class="feature-body">
+            Browse and sort all road segments by predicted speeding rate, crash rate,
+            KSI rate, road class, and physical characteristics to prioritize interventions.
+          </p>
+          <span class="feature-cta">View Table &rarr;</span>
+        </a>
+
+        <a href="about.html" class="feature-card feature-card--link">
+          <div class="feature-icon feature-icon--gray">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <h3 class="feature-title">Methodology &amp; Data</h3>
+          <p class="feature-body">
+            Full documentation of the Random Forest model, predictors, training data,
+            validation metrics, and limitations.
+          </p>
+          <span class="feature-cta">Read More &rarr;</span>
+        </a>
+
+      </div>
+    </section>
+
+    <!-- ── RISK EXPLAINER ──────────────────────────────────────────── -->
+    <section class="risk-section">
+      <h2 class="section-title">Speeding Risk Categories</h2>
+      <div class="risk-cards">
+        <div class="risk-card risk-card--low">
+          <div class="risk-card-badge">Low</div>
+          <div class="risk-card-pct">&lt; 10%</div>
+          <p class="risk-card-body">Fewer than 1 in 10 vehicles exceeds the speed limit. Typical of local residential streets with traffic calming.</p>
+        </div>
+        <div class="risk-card risk-card--moderate">
+          <div class="risk-card-badge">Moderate</div>
+          <div class="risk-card-pct">10–20%</div>
+          <p class="risk-card-body">Consistent off-peak speeding. Often found on collector roads with moderate volume and no calming.</p>
+        </div>
+        <div class="risk-card risk-card--high">
+          <div class="risk-card-badge">High</div>
+          <div class="risk-card-pct">20–30%</div>
+          <p class="risk-card-body">Significant speeding risk. Common on minor and major arterials late at night.</p>
+        </div>
+        <div class="risk-card risk-card--very-high">
+          <div class="risk-card-badge">Very High</div>
+          <div class="risk-card-pct">&gt; 30%</div>
+          <p class="risk-card-body">More than 1 in 3 vehicles exceeds the limit. Associated with wide, multi-lane, high-speed corridors like Roosevelt Blvd.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="landing-footer">
+    <div class="footer-inner">
+      <a href="https://pennmusa.github.io/MUSA_801.io/" class="footer-link" target="_blank" rel="noopener">Spring 2026 &middot; MUSA Practicum &middot; University of Pennsylvania</a>
+      <span class="footer-sep">|</span>
+      <a href="https://github.com/kavanaraju" class="footer-link" target="_blank" rel="noopener">Kavana Raju</a>
+      <span class="footer-sep">&middot;</span>
+      <a href="https://github.com/ChristineCui12" class="footer-link" target="_blank" rel="noopener">Christine Cui</a>
+      <span class="footer-sep">&middot;</span>
+      <a href="https://github.com/chihyunkim" class="footer-link" target="_blank" rel="noopener">Chi-Hyun Kim</a>
+      <span class="footer-sep">&middot;</span>
+      <a href="https://github.com/demiyang12" class="footer-link" target="_blank" rel="noopener">Demi Yang</a>
+      <span class="footer-sep">|</span>
+      <a href="https://chihyunkim.github.io/otis_off_peak_roadway_safety/PROJECT_WRITEUP.html" class="footer-link" target="_blank" rel="noopener">Methodology</a>
+    </div>
+  </footer>
+
+  <!-- Disclaimer Modal -->
+  <div id="otis-disclaimer-modal" class="otis-modal-overlay">
+    <div class="otis-modal">
+      <div class="otis-modal-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Research Tool — Not an Official Government App
+      </div>
+      <div class="otis-modal-body">
+        <p>This tool is an <strong>academic research prototype</strong> and is <strong>not</strong> an official application of the City of Philadelphia or its Office of Transportation &amp; Infrastructure Systems (OTIS).</p>
+        <p>Data, model predictions, and visualizations are produced for research and educational purposes only. They have not been reviewed or endorsed by the City of Philadelphia, OTIS, or any other government agency, and should not be used as the sole basis for policy or capital investment decisions.</p>
+        <p>By continuing, you acknowledge that this is an independent research tool, not an authoritative government resource.</p>
+      </div>
+      <div class="otis-modal-footer">
+        <button id="otis-disclaimer-ok" class="otis-modal-btn">I Understand — Continue</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    document.getElementById('otis-disclaimer-ok').addEventListener('click', function () {
+      document.getElementById('otis-disclaimer-modal').classList.add('hidden');
+    });
+  </script>
+</body>
+</html>

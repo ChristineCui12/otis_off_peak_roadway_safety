@@ -12,6 +12,7 @@ library(boxr)
 library(pdp)
 library(DALEXtra)
 library(sf)
+library(patchwork)
 
 # Set up remote data access via Box API
 box_auth()
@@ -22,6 +23,7 @@ theme_set(theme_light())
 
 # Read data -----------------------------------------------------------------------------------
 
+# Data folder
 # box_ls(362958210990)
 
 # Centerlines data with geometry
@@ -34,81 +36,117 @@ speed_raw <- box_read_rds(2133989776667) %>%
   select(recordnum, traffic_direction_original = trafdir) %>% 
   distinct()
 
-# Speed data
-speed <- box_read_rds(2171353657698) %>% 
+# Processed speed data
+speed <- box_read_rds(2193174265310) %>% 
   mutate(seg_id = as.character(seg_id)) %>% 
-  mutate(speed_measurement_hour = as.character(speed_measurement_hour)) %>% 
-  mutate(speed_measurement_hour = str_pad(speed_measurement_hour, width = 2, side = "left", pad = "0")) %>% 
   mutate(speed_measurement_month = as.character(speed_measurement_month)) %>% 
   mutate(speed_measurement_month = str_pad(speed_measurement_month, width = 2, side = "left", pad = "0")) %>% 
   left_join(speed_raw, by = "recordnum") %>% 
   mutate(traffic_direction =
            case_when(traffic_direction_original %in% c("both") ~ "Both",
                      traffic_direction_original %in% c("east", "north", "south", "west") ~ "One way"))
-  # left_join(centerlines_geometry %>% 
-  #             sf::st_drop_geometry() %>% 
-  #             select(seg_id, oneway))
 
-# Hand-checked data
-data_checked <- box_read_csv(2190702126891) %>% 
-  mutate(seg_id = as.character(seg_id)) 
+# Hand-checked and added roadway configuration data
+data_checked <- box_read_csv(2205423482212) %>% 
+  mutate(seg_id = as.character(seg_id)) %>% 
+  mutate(wide_shoulder = shoulder_width >= 8) %>% 
+  mutate(width_per_traffic_lane = traffic_lanes_width / lanes)
 
 # Crash data
-crashes <- box_read(2172557691734) %>% 
+# Crash data are not used in the model but are linked to model outputs so they can be presented in the app
+crashes <- box_read(2195155235316) %>% 
   mutate(seg_id = as.character(seg_id)) %>% 
-  mutate(crash_speed_involvement_rate = speeding / total_crashes)
+  # Collate into periods and reshape
+  mutate(crashes_a = evening + night) %>% 
+  mutate(ksi_a = ksi_eve + ksi_night) %>% 
+  select(seg_id, 
+         crashes_a, 
+         crashes_b = midday, 
+         crashes_c = pm_peak,
+         crashes_d = am_peak,
+         ksi_a,
+         ksi_b = ksi_midday,
+         ksi_c = ksi_pm,
+         ksi_d = ksi_am) %>% 
+  mutate(ksi_rate_a = ksi_a / crashes_a,
+         ksi_rate_b = ksi_b / crashes_b,
+         ksi_rate_c = ksi_c / crashes_c,
+         ksi_rate_d = ksi_d / crashes_d) %>% 
+  pivot_longer(!seg_id, 
+               names_pattern = "(.+)_(a|b|c|d)",
+               names_to = c("measure", "period"),
+               values_to = "value") %>% 
+  pivot_wider(names_from = "measure", 
+              values_from = "value") %>% 
+  mutate(speed_measurement_period =
+           case_when(period == "a" ~ "Off-peak (night)",  
+                     period == "b" ~ "Off-peak (midday)",
+                     period == "c" ~ "Peak (evening)",
+                     period == "d" ~ "Peak (morning)")) %>% 
+  mutate(speed_measurement_period =
+           fct_relevel(speed_measurement_period,
+                       "Off-peak (night)", "Peak (morning)", "Off-peak (midday)", "Peak (evening)"))
 
 # Street network data
+# Much of this is superceded by manual data collection, but we still take some geometry variables directly
 network_main <- box_read_rds(2151757279199) %>% 
   as_tibble() %>% 
-  mutate(bike_lane = 
-           case_when(bike_any == TRUE ~ TRUE,
-                     bike_any == FALSE ~ FALSE,
-                     is.na(bike_any) ~ FALSE)) %>% 
-  mutate(width_rms = na_if(surfawidth, 0)) %>% 
-  rename(width_dvrpc = NEW_WID, 
-         lanes_dvrpc = NEW_LANES,
-         arterial_type_dvrpc = TYPOLOGY__,
-         divided_roadway = DIV_RDWY,
-         road_classification_city = class1_cs, 
-         road_classification_fhwa = fhwa_func_desc) %>% 
-  # Compile and correct widths
-  mutate(width = coalesce(width_rms, width_dvrpc)) %>% 
-  mutate(width = case_when(
-    seg_id == "340834" ~ 75,
-    seg_id == "340836" ~ 72,
-    seg_id == "221117" ~ 93,
-    seg_id == "421398" ~ 80,
-    .default = width
-  )) %>% 
-  mutate(divided_roadway = case_when(divided_roadway == 1 ~ TRUE,
-                                     divided_roadway == 0 ~ FALSE))
+  rename(
+    # width_dvrpc = NEW_WID, 
+    # lanes_dvrpc = NEW_LANES,
+    # divided_roadway = DIV_RDWY,
+    arterial_type_dvrpc = TYPOLOGY__,
+    road_classification_city = class1_cs, 
+    road_classification_fhwa = fhwa_func_desc
+  )
+# %>% 
+#   # Binary variables
+#   mutate(bike_lane = 
+#            case_when(bike_any == TRUE ~ TRUE,
+#                      bike_any == FALSE ~ FALSE,
+#                      is.na(bike_any) ~ FALSE)) %>% 
+#   mutate(divided_roadway = 
+#            case_when(divided_roadway == 1 ~ TRUE,
+#                      divided_roadway == 0 ~ FALSE)) %>% 
+#   # Compile and correct widths
+#   mutate(width_rms = na_if(surfawidth, 0)) %>% 
+#   mutate(width = coalesce(width_rms, width_dvrpc)) %>% 
+#   mutate(width = case_when(
+#     seg_id == "340834" ~ 75,
+#     seg_id == "340836" ~ 72,
+#     seg_id == "221117" ~ 93,
+#     seg_id == "421398" ~ 80,
+#     .default = width))
 
+# Other road network characteristics
 network_supplementary <- box_read_rds(2175268420062) %>% 
   mutate(traffic_calming = count_calming > 0)
 
-network_bike <- box_read_rds(2178022998565) %>% 
-  # Clean up bike categories
-  mutate(bike_lane_type_simple =
-           case_when(bike_lane_type %in% c("Advisory Bike Lane", "Sharrow") ~ 
-                       "Sharrow",
-                     bike_lane_type %in% c("Bus/Bike Lane", "Painted Bike Lane") ~ 
-                       "Painted",
-                     bike_lane_type %in% c("None", "Unknown") ~ 
-                       "None",
-                     bike_lane_type %in% c("On-Street Separated Bike Lane", "Raised Separated Bike Lane", "Shared Use Sidepath") ~ 
-                       "Separated",
-                     is.na(bike_lane_type) ~ "None",
-                     .default = "CHECK")) %>% 
-  full_join(data_checked %>% 
-              select(seg_id, year, bike_lane_type_checked = bike_lane_type_simple),
-            by = c("seg_id", "year")) %>% 
-  mutate(bike_lane_status = coalesce(bike_lane_type_checked, bike_lane_type_simple)) %>% 
-  # If type is 'None', exclude here and NA in modeling data will be turned into 'None'.
-  # filter: removed 1,348 rows (6%), 19,628 rows remaining
-  filter(bike_lane_status != "None")
-
+# Parcel density data
 network_parcels <- box_read_rds(2178038226815)
+
+# Deprecated by manually-checked data
+
+# network_bike <- box_read_rds(2178022998565) %>% 
+#   # Clean up bike categories
+#   mutate(bike_lane_type_simple =
+#            case_when(bike_lane_type %in% c("Advisory Bike Lane", "Sharrow") ~ 
+#                        "Sharrow",
+#                      bike_lane_type %in% c("Bus/Bike Lane", "Painted Bike Lane") ~ 
+#                        "Painted",
+#                      bike_lane_type %in% c("None", "Unknown") ~ 
+#                        "None",
+#                      bike_lane_type %in% c("On-Street Separated Bike Lane", "Raised Separated Bike Lane", "Shared Use Sidepath") ~ 
+#                        "Separated",
+#                      is.na(bike_lane_type) ~ "None",
+#                      .default = "CHECK")) %>% 
+#   full_join(data_checked %>% 
+#               select(seg_id, year, bike_lane_type_checked = bike_lane_type_simple),
+#             by = c("seg_id", "year")) %>% 
+#   mutate(bike_lane_status = coalesce(bike_lane_type_checked, bike_lane_type_simple)) %>% 
+#   # If type is 'None', exclude here and NA in modeling data will be turned into 'None'.
+#   # filter: removed 1,348 rows (6%), 19,628 rows remaining
+#   filter(bike_lane_status != "None")
 
 # # OSM data (no longer used now that data have been hand-checked)
 # osm_characteristics <- box_read_rds(2174904376082)
@@ -116,29 +154,40 @@ network_parcels <- box_read_rds(2178038226815)
 # Compile modeling dataset --------------------------------------------------------------------
 
 modeling_data <- speed %>% 
-  # Exclude any rows with missing DP
-  # filter: removed 180 rows (<1%), 54,132 rows remaining
+  # Exclude any rows with missing dependent variable
+  # filter: removed 3 rows (<1%), 9,049 rows remaining
   filter(!is.na(all_speeding_percent) & !is.na(high_speeding_percent)) %>% 
   mutate(year = year(speed_measurement_date)) %>% 
   select(seg_id, 
          all_speeding_percent,
+         high_speeding_percent,
          volume_total,
          speed_measurement_road,
-         year, speed_measurement_month, speed_measurement_day_of_week, speed_measurement_hour,
+         year, speed_measurement_month, speed_measurement_day_of_week, speed_measurement_period,
          speed_limit, 
          traffic_direction) %>% 
   # Join variable inputs
   left_join(data_checked %>% 
-              select(seg_id, lanes, divided_roadway, parking, sidewalk_status),
+              select(seg_id, 
+                     lanes, 
+                     divided_roadway, 
+                     parking, 
+                     sidewalk_status, 
+                     bike_lane_status = bike_lane_type_simple,
+                     curb_to_curb_width,
+                     traffic_lanes_width,
+                     width_per_traffic_lane,
+                     shoulder_width,
+                     wide_shoulder),
             by = "seg_id") %>% 
   # Make sure to treat lanes not as a continuous variable
   mutate(lanes = as.factor(lanes)) %>% 
-  left_join(crashes %>% 
-              select(seg_id, total_crashes, ksi_rate, crash_speed_involvement_rate),
-            by = "seg_id") %>% 
+  left_join(crashes %>%
+              select(seg_id, speed_measurement_period, crashes, ksi_rate),
+            by = c("seg_id", "speed_measurement_period")) %>%
   left_join(network_main %>% 
               select(seg_id, 
-                     length, width, 
+                     length, 
                      arterial_type_dvrpc,
                      road_classification_city,
                      road_classification_fhwa),
@@ -146,21 +195,14 @@ modeling_data <- speed %>%
   left_join(network_supplementary %>% 
               select(seg_id, count_transit, traffic_calming, count_intersection_ctrl),
             by = "seg_id") %>% 
-  left_join(network_bike %>% 
-              select(seg_id, year, bike_lane_status),
-            by = c("seg_id", "year")) %>% 
-  # Bike lane data are complete, so NA means no lane
-  mutate(bike_lane_status = replace_na(bike_lane_status, "None")) %>% 
-  # If there is no join, there are 0 properties on that segment
+  # If there is no join for parcel density, it's because there are 0 properties on that segment
   left_join(network_parcels %>% 
               select(seg_id, parcel_density),
             by = "seg_id") %>% 
   mutate(parcel_density = replace_na(parcel_density, 0)) %>% 
-  # # Road width per lane variable
-  # mutate(width_per_lane = width / lanes) %>% 
   select(-c(year))
 
-# box_save_rds(modeling_data, file_name = "modeling_data_v7.rds", dir_id = 372762671750)
+# box_save_rds(modeling_data, file_name = "modeling_data_v9.rds", dir_id = 372762671750)
 
 # Create training/test partition --------------------------------------------------------------
 
@@ -172,199 +214,333 @@ modeling_test <- testing(modeling_split)
 
 # Specify model -------------------------------------------------------------------------------
 
-# mtry = tune(), min_n = tune()
 rf_spec <- 
-  rand_forest() %>% 
+  rand_forest(trees = 500, mtry = tune(), min_n = tune()) %>% 
   set_engine("ranger", importance = "impurity") %>% 
   set_mode("regression")
 
-# # Placeholder for linear model
-# rf_lm <- linear_reg()
-
 # Specify recipes -----------------------------------------------------------------------------
 
+target_variable <- 
+  c("all_speeding_percent")
+
+full_predictors <- 
+  c("speed_measurement_period", 
+    # "lanes",    # Replaced by traffic_lanes_width
+    "road_classification_city",
+    "volume_total",         
+    "speed_measurement_month",
+    "speed_measurement_day_of_week",
+    "speed_limit",
+    "traffic_direction",          
+    "divided_roadway",
+    "parking",
+    "sidewalk_status", 
+    "bike_lane_status",
+    "parcel_density",
+    "count_transit",
+    "traffic_calming",
+    "count_intersection_ctrl",
+    "curb_to_curb_width",
+    "traffic_lanes_width",
+    "width_per_traffic_lane",
+    "wide_shoulder",
+    "length")
+
+# Base recipe with target variable
 recipe_0 <- recipe(modeling_train) %>% 
-  update_role(all_speeding_percent, new_role = "outcome")
+  update_role(all_of(target_variable), 
+              new_role = "outcome")
 
-# Minimal model (RF): City road classification
-recipe_minimal_rf_city <- recipe_0 %>% 
-  update_role(speed_measurement_hour, 
-              lanes,
-              road_classification_city,
-              volume_total,
-              new_role = "predictor")
-
-# Minimal model (RF): FHWA road classification
-recipe_minimal_rf_fhwa <- recipe_0 %>% 
-  update_role(speed_measurement_hour, 
-              lanes,
-              road_classification_fhwa,
-              volume_total,
-              new_role = "predictor")
-
-# Main model (RF): City road classification
+# Main model (RF)
 recipe_main_rf_city <- recipe_0 %>% 
-  update_role(speed_measurement_hour, 
-              lanes,
-              road_classification_city,
-              divided_roadway,
-              traffic_direction,
-              speed_measurement_road,            # Fixed effect for road name
-              speed_measurement_month,
-              speed_measurement_day_of_week,
-              speed_limit,
-              volume_total,                      # Total volume for hour measured
-              sidewalk_status, 
-              parking,
-              bike_lane_status,
-              parcel_density,
-              count_transit,
-              traffic_calming,
-              count_intersection_ctrl,
-              length,
-              width,
-              total_crashes,
-              ksi_rate,
+  update_role(all_of(full_predictors),
               new_role = "predictor")
 
-# Main model (RF): FHWA road classification
-recipe_main_rf_fhwa <- recipe_0 %>% 
-  update_role(speed_measurement_hour, 
-              lanes,
-              road_classification_fhwa,
-              divided_roadway,
-              traffic_direction,
-              speed_measurement_road,            # Fixed effect for road name
-              speed_measurement_month,
-              speed_measurement_day_of_week,
-              speed_limit,
-              volume_total,                      # Total volume for hour measured
-              sidewalk_status, 
-              parking,
-              bike_lane_status,
-              parcel_density,
-              count_transit,
-              traffic_calming,
-              count_intersection_ctrl,
-              length,
-              width,
-              total_crashes,
-              ksi_rate,
-              new_role = "predictor")
+# Collect recipes and model into workflow ------------------------------------------------
 
-# Specify hyperparameter search ---------------------------------------------------------------
+workflow <- workflow() %>% 
+  add_recipe(recipe_main_rf_city) %>% 
+  add_model(rf_spec)
 
-# Start course, move finer
-# rf_params <- extract_parameter_set_dials(rf_spec) %>%
-#   update(
-#     mtry = mtry(range = c(2, 15)),
-#     min_n = min_n(range = c(5, 50))
-#   )
+# Specify hyperparameter search space ---------------------------------------------------------
 
-# rf_grid <- grid_space_filling(rf_params, size = 12,  type = "latin_hypercube")
-
-# Collect recipes and models into workflow set ------------------------------------------------
-
-models <-
-  workflow_set(preproc = list(minimal_city = recipe_minimal_rf_city, 
-                              # minimal_fhwa = recipe_minimal_rf_fhwa, 
-                              main_city = recipe_main_rf_city),
-                              # main_fhwa = recipe_main_rf_fhwa),
-               models = list(rf_spec),
-               cross = TRUE)
+# Based on previous searches, values of mtry between 7 and 13 and min_n between 2 and 8 are most promising
+tune_grid <- grid_regular(
+  mtry(range = c(7, 13)),
+  min_n(range = c(2, 8)),
+  levels = 7
+)
 
 # Create and run resampling folds --------------------------------------------------------------
 
-set.seed("2718")
+set.seed(2718)
 data_folds <- vfold_cv(modeling_train, v = 10)
 
 metrics <- metric_set(mae, rmse, rsq)
 control <- control_resamples(save_pred = TRUE)
 
 tictoc::tic()
-# ~155 sec elapsed
-model_resamples <- models %>% 
-  workflow_map(
-    "fit_resamples", 
-    # Options to `workflow_map()`: 
-    seed = 2718, verbose = TRUE,
-    # Options to `fit_resamples()`: 
-    resamples = data_folds, 
-    metrics = metrics,
-    control = control
-  )
+
+set.seed(2718)
+# Runtime ~28 min
+model_resamples <- workflow %>% 
+  tune_grid(resamples = data_folds,
+            grid = tune_grid,
+            metrics = metrics,
+            control = control)
+
 tictoc::toc()
 
-collect_metrics(model_resamples) 
+resample_results <- collect_metrics(model_resamples) 
 
-#   wflow_id                 .config              preproc model       .metric .estimator   mean     n  std_err
-#   <chr>                    <chr>                <chr>   <chr>       <chr>   <chr>       <dbl> <int>    <dbl>
-# 1 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest mae     standard   0.173     10 0.000833
-# 2 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.228     10 0.000932
-# 3 minimal_city_rand_forest Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.344     10 0.00351 
+# Tuning metrics results
+autoplot(model_resamples)
+show_best(model_resamples, metric = "rmse")
 
-# 4 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest mae     standard   0.0601    10 0.000211
-# 5 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rmse    standard   0.0929    10 0.000499
-# 6 main_city_rand_forest    Preprocessor1_Model1 recipe  rand_forest rsq     standard   0.892     10 0.000900
+# Finalize model and get testing metrics ------------------------------------------------------
 
-# Fit to training data ------------------------------------------------------------------------
+# Extract the model with hyperparameters minimizing RMSE
+final_workflow <- workflow %>%
+  finalize_workflow(select_best(model_resamples, metric = "rmse"))
 
-# Extract the best workflow (using the functions described above)
-ranked_workflows <- model_resamples %>% 
-  rank_results(rank_metric = "rmse")
+set.seed(2718)
+# Collect final model validation data
+final_fit <- final_workflow %>% 
+  last_fit(modeling_split, metrics = metrics) 
 
-best_workflow_id <- ranked_workflows %>% 
-  slice(1) |>
-  pull(wflow_id)
+collect_metrics(final_fit)
+#   .metric .estimator .estimate .config        
+#   <chr>   <chr>          <dbl> <chr>          
+# 1 mae     standard      0.0417 pre0_mod0_post0
+# 2 rmse    standard      0.0736 pre0_mod0_post0
+# 3 rsq     standard      0.920  pre0_mod0_post0
 
-best_workflow <- models %>% 
-  extract_workflow(id = best_workflow_id)
+collect_predictions(final_fit) %>%
+  ggplot(aes(.data[[target_variable]], .pred)) +
+  geom_abline(lty = 2, color = "gray50") +
+  geom_point(alpha = 0.5, color = "midnightblue") +
+  coord_fixed()
 
-# 13.587 sec elapsed
-tictoc::tic()
-best_fit <- fit(best_workflow, modeling_train)
-tictoc::toc()
+# Extract model object and train on full data -------------------------------------------------
 
-# # Or manually specify fit of interest
-# best_fit <- fit(workflow() %>% 
-#                   add_recipe(recipe_main_rf_city) %>% 
-#                   add_model(rf_spec),
-#                 modeling_train)
+final_model <- extract_workflow(final_fit)
 
-# Partial dependence plots --------------------------------------------------------------------
+# box_save_rds(final_model, file_name = "final_model_fit_v5.rds", dir_id = 372762671750)
+
+# Or load model fit from memory so you don't need to run full hyperparameter search
+# final_model <- box_read_rds(2215931771424)
+
+# Predict on the full modeling data -----------------------------------------------------------
+
+predictions <- predict(final_model, new_data = modeling_data, type = "numeric")
+
+predicted_data <- bind_cols(modeling_data, predictions) %>% 
+  rename(predicted_speeding_percent = .pred) %>% 
+  relocate(predicted_speeding_percent, .after = seg_id) %>% 
+  left_join(centerlines_geometry %>% select(seg_id)) %>% 
+  st_as_sf(crs = "EPSG:2272")
+
+# box_save_rds(predicted_data, file_name = "model_predicted_data_v5.rds", dir_id = 372762671750)
+
+# Error analysis ------------------------------------------------------------------------------
+
+predicted_data %>% 
+  group_by(speed_measurement_period) %>% 
+  rmse(all_speeding_percent, predicted_speeding_percent)
+#   speed_measurement_period .metric .estimator .estimate
+#   <fct>                    <chr>   <chr>          <dbl>
+# 1 Off-peak (night)         rmse    standard      0.0550
+# 2 Off-peak (midday)        rmse    standard      0.0462
+# 3 Peak (evening)           rmse    standard      0.0455
+# 4 Peak (morning)           rmse    standard      0.0510
+
+predicted_data %>% 
+  group_by(road_classification_city) %>% 
+  rmse(all_speeding_percent, predicted_speeding_percent)
+#   road_classification_city .metric .estimator .estimate
+#   <chr>                    <chr>   <chr>          <dbl>
+# 1 Collector Residential    rmse    standard      0.0304
+# 2 Local Residential        rmse    standard      0.0407
+# 3 Major Arterial           rmse    standard      0.0705
+# 4 Minor Arterial           rmse    standard      0.0468
+# 5 NA                       rmse    standard      0.0467
+
+predicted_data %>% 
+  group_by(lanes) %>% 
+  rmse(all_speeding_percent, predicted_speeding_percent)
+#   lanes .metric .estimator .estimate
+#   <fct> <chr>   <chr>          <dbl>
+# 1 1     rmse    standard      0.0311
+# 2 2     rmse    standard      0.0425
+# 3 3     rmse    standard      0.0671
+# 4 4     rmse    standard      0.0553
+# 5 5     rmse    standard      0.0788
+# 6 6     rmse    standard      0.0792
+# 7 7     rmse    standard      0.0796
+# 8 8     rmse    standard      0.0803
+
+predicted_data %>% 
+  group_by(traffic_direction) %>% 
+  rmse(all_speeding_percent, predicted_speeding_percent)
+#   traffic_direction .metric .estimator .estimate
+#   <chr>             <chr>   <chr>          <dbl>
+# 1 Both              rmse    standard      0.0595
+# 2 One way           rmse    standard      0.0352
+
+predicted_data %>% 
+  group_by(traffic_calming) %>% 
+  rmse(all_speeding_percent, predicted_speeding_percent)
+#   traffic_calming .metric .estimator .estimate
+#   <lgl>           <chr>   <chr>          <dbl>
+# 1 FALSE           rmse    standard      0.0522
+# 2 TRUE            rmse    standard      0.0250
+
+predicted_data %>% 
+  group_by(speed_limit) %>% 
+  rmse(all_speeding_percent, predicted_speeding_percent)
+#   speed_limit .metric .estimator .estimate
+#         <int> <chr>   <chr>          <dbl>
+# 1          15 rmse    standard      0.148 
+# 2          20 rmse    standard      0.0402
+# 3          25 rmse    standard      0.0452
+# 4          30 rmse    standard      0.0485
+# 5          35 rmse    standard      0.0641
+# 6          40 rmse    standard      0.183 
+# 7          50 rmse    standard      0.0209
+
+predicted_data %>% 
+  group_by(speed_measurement_day_of_week) %>% 
+  rmse(all_speeding_percent, predicted_speeding_percent)
+#   speed_measurement_day_of_week .metric .estimator .estimate
+#   <chr>                         <chr>   <chr>          <dbl>
+# 1 Weekday                       rmse    standard      0.0493
+# 2 Weekend                       rmse    standard      0.0504
+
+predicted_data %>% 
+  group_by(parking) %>% 
+  rmse(all_speeding_percent, predicted_speeding_percent)
+#   parking    .metric .estimator .estimate
+#   <chr>      <chr>   <chr>          <dbl>
+# 1 Both sides rmse    standard      0.0426
+# 2 None       rmse    standard      0.0702
+# 3 One side   rmse    standard      0.0497
+
+predicted_data %>% 
+  group_by(sidewalk_status) %>% 
+  rmse(all_speeding_percent, predicted_speeding_percent)
+#   sidewalk_status .metric .estimator .estimate
+#   <chr>           <chr>   <chr>          <dbl>
+# 1 Both sides      rmse    standard      0.0489
+# 2 None            rmse    standard      0.0993
+# 3 One side        rmse    standard      0.0392
+
+predicted_data %>% 
+  group_by(bike_lane_status) %>% 
+  rmse(all_speeding_percent, predicted_speeding_percent)
+#   bike_lane_status .metric .estimator .estimate
+#   <chr>            <chr>   <chr>          <dbl>
+# 1 None             rmse    standard      0.0424
+# 2 Painted          rmse    standard      0.0612
+# 3 Separated        rmse    standard      0.0495
+# 4 Sharrow          rmse    standard      0.0404
+
+# Predict on scenarios ------------------------------------------------------------------------
+
+scenario_data <- box_read_csv(2218094430533) %>% 
+  mutate(across(c(speed_measurement_month, seg_id, lanes), ~as.character(.))) %>% 
+  # Harmonize variable values with modeling input data
+  # mutate: changed 4,742 values (11%) of 'traffic_lanes_width' (0 new NAs)
+  mutate(traffic_lanes_width = round(traffic_lanes_width)) %>% 
+  mutate(speed_measurement_month = str_pad(speed_measurement_month, width = 2, side = "left", pad = "0"))
+
+predictions_scenarios <- predict(final_model, new_data = scenario_data, type = "numeric")
+
+predicted_scenarios_data <- bind_cols(scenario_data, predictions_scenarios) %>% 
+  rename(predicted_speeding_percent = .pred) %>% 
+  relocate(predicted_speeding_percent, .after = seg_id) %>% 
+  # Aggregate across measurement days
+  group_by(pick(c("seg_id",
+                  "speed_measurement_road",
+                  "speed_measurement_period",
+                  "speed_limit", "traffic_direction", "lanes", "divided_roadway",
+                  "parking", "sidewalk_status", "bike_lane_status", "curb_to_curb_width",
+                  "traffic_lanes_width", "width_per_traffic_lane", "shoulder_width",
+                  "wide_shoulder", "crashes", "ksi_rate", "length", "arterial_type_dvrpc",
+                  "road_classification_city", "road_classification_fhwa", "count_transit",
+                  "traffic_calming", "count_intersection_ctrl", "parcel_density",
+                  "scenario_name"))) %>%
+  summarize(predicted_speeding_percent = mean(predicted_speeding_percent, na.rm = TRUE),
+            all_speeding_percent = mean(all_speeding_percent, na.rm = TRUE),
+            high_speeding_percent = mean(high_speeding_percent, na.rm = TRUE)) %>% 
+  # Prepare for output
+  mutate(all_speeding_percent = 
+           if_else(scenario_name == "existing_conditions", all_speeding_percent, NA)) %>% 
+  mutate(high_speeding_percent = 
+           if_else(scenario_name == "existing_conditions", high_speeding_percent, NA)) %>% 
+  # Add geospatial
+  left_join(centerlines_geometry %>% select(seg_id)) %>% 
+  st_as_sf(crs = "EPSG:2272") %>% 
+  arrange(seg_id, speed_measurement_period, scenario_name)
+
+# predicted_scenarios_data %>% distinct(seg_id, speed_measurement_period, scenario_name) %>% nrow()
+
+# st_write(predicted_scenarios_data, "model_scenario_predicted_data_v7.geojson")
+# write_csv(predicted_scenarios_data %>% st_drop_geometry(), "model_scenario_predicted_data_v7.csv")
+
+# Model explanations --------------------------------------------------------------------------
 
 explainer <- explain_tidymodels(
-  model  = best_fit,
-  data   = modeling_train %>% select(-all_speeding_percent),  # predictors only
-  y      = modeling_train$all_speeding_percent,
+  model  = final_model,
+  data   = modeling_data %>% select(-all_of(target_variable)),
+  y      = modeling_data %>% select(all_of(target_variable)),
   label  = "Random Forest"
 )
 
-pdp_speed_measurement_hour <- 
+# Variable importance -------------------------------------------------------------------------
+
+set.seed(2718)
+vif <- model_parts(explainer = explainer, 
+                   loss_function = loss_root_mean_square,
+                   type = "difference",
+                   B = 10,
+                   N = NULL,
+                   variables = full_predictors)
+
+plot(vif)
+
+# Partial dependence plots --------------------------------------------------------------------
+
+pdp_speed_measurement_period <- 
   model_profile(explainer, 
                 type      = "partial",   
-                variables = "speed_measurement_hour",
+                variables = "speed_measurement_period",
                 N         = NULL) 
 
-pdp_speed_measurement_hour_plot <- 
-  as_tibble(pdp_speed_measurement_hour$agr_profiles) %>% 
+pdp_speed_measurement_period_plot <- 
+  as_tibble(pdp_speed_measurement_period$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "Off-peak (night)", 
+                             "Peak (morning)", 
+                             "Off-peak (midday)", 
+                             "Peak (evening)")) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8, color = "#ff9500") +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by hour of day",
-       y = "Probability of speeding",
-       x = "Hour of day (24-hour time)")
+  labs(title = "Predicted speeding by period of day",
+       y = "Predicted speeding %",
+       x = "Period of day")
 
-pdp_speed_measurement_hour_plot
+pdp_speed_measurement_period_plot
 
-# ggsave(plot = pdp_speed_measurement_hour_plot, filename = "pdp_hour.svg", width = 6, height = 4)
+# ggsave(plot = pdp_speed_measurement_period_plot, filename = "pdp_period.svg", width = 6, height = 4)
 
 pdp_lanes <- 
   model_profile(explainer, 
                 type      = "partial",   
-                variables = "lanes",
+                variables = "traffic_lanes_width",
                 N         = NULL) 
 
 pdp_lanes_plot <- 
@@ -374,115 +550,54 @@ pdp_lanes_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by number of lanes",
-       y = "Probability of speeding",
-       x = "Number of lanes in roadway")
+  labs(title = "Predicted speeding by width of roadway for traffic lanes",
+       y = "Predicted speeding %",
+       x = "Width of traffic lanes")
 
-pdp_lanes_plot
+pdp_lanes_density <- ggplot(modeling_data, aes(x = traffic_lanes_width)) +
+  geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
 
-# ggsave(plot = pdp_lanes_plot, filename = "pdp_lanes.svg", width = 6, height = 4)
+pdp_lanes_plot / pdp_lanes_density + plot_layout(heights = c(4, 1))
 
-pdp_road_type_by_lanes <- 
+# ggsave(filename = "pdp_lanes.svg", width = 6, height = 4)
+
+pdp_lanes_by_period <- 
   model_profile(explainer, 
                 type      = "partial",   
-                variables = "lanes",
-                groups = "road_classification_city",
+                variables = "traffic_lanes_width",
+                groups    = "speed_measurement_period",
                 N         = NULL)
 
-pdp_road_type_by_lanes_plot <- 
-  as_tibble(pdp_road_type_by_lanes$agr_profiles) %>% 
-  mutate(`_groups_` =
-           fct_relevel(`_groups_`,
-                       "Major Arterial",
-                       "Minor Arterial",
-                       "Collector Residential",
-                       "Local Residential")) %>%
-  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`)) +
-  geom_line(linewidth = 1.2, alpha = 0.8) +
-  scale_y_continuous(limits = c(0, NA), 
-                     expand = expansion(mult = c(0, 0.2)),
-                     labels = label_percent()) +
-  # scale_color_manual(values = c("#ff9500", "#ffd000", "#00badb", "#156082")) +
-  labs(title = "Predicted probability of speeding by number of lanes and road type",
-       y = "Probability of speeding",
-       x = "Number of lanes in roadway",
-       color = "Road type")
-
-pdp_road_type_by_lanes_plot
-
-# ggsave(plot = pdp_road_type_by_lanes_plot, filename = "pdp_road_type_by_lanes.svg", width = 7, height = 4)
-
-pdp_traffic_direction_by_lanes <- 
-  model_profile(explainer, 
-                type      = "partial",   
-                variables = "lanes",
-                groups = "traffic_direction",
-                N         = NULL)
-
-pdp_traffic_direction_by_lanes_plot <- 
-  as_tibble(pdp_traffic_direction_by_lanes$agr_profiles) %>% 
+pdp_lanes_by_period_plot <- 
+  as_tibble(pdp_lanes_by_period$agr_profiles) %>% 
   ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
   geom_line(linewidth = 1.2, alpha = 0.8) +
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  # scale_color_manual(values = c("#ff9500", "#ffd000", "#00badb", "#156082")) +
-  labs(title = "Predicted probability of speeding by number of lanes and traffic direction",
-       y = "Probability of speeding",
-       x = "Number of lanes in roadway",
-       color = "Traffic direction")
+  labs(title = "Predicted speeding by width of traffic lanes and time of day",
+       y = "Predicted speeding %",
+       x = "Width of traffic lanes",
+       color = "Time of day")
 
-pdp_traffic_direction_by_lanes_plot
+pdp_lanes_by_period_plot
 
-# ggsave(plot = pdp_traffic_direction_by_lanes_plot, filename = "pdp_traffic_direction_by_lanes.svg", width = 7, height = 4)
 
-pdp_hour_by_lanes <- 
-  model_profile(explainer, 
-                type      = "partial",   
-                variables = "speed_measurement_hour",
-                groups    = "lanes",
-                N         = NULL)
-
-pdp_hour_by_lanes_plot <- 
-  as_tibble(pdp_hour_by_lanes$agr_profiles) %>% 
-  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
-  geom_line(linewidth = 1.2, alpha = 0.8) +
-  scale_y_continuous(limits = c(0, NA), 
-                     expand = expansion(mult = c(0, 0.2)),
-                     labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by number of lanes and measurement hour",
-       y = "Probability of speeding",
-       x = "Number of lanes in roadway",
-       color = "Lane count")
-
-pdp_hour_by_lanes_plot
-plotly::ggplotly(pdp_hour_by_lanes_plot)
-
-# ggsave(plot = pdp_hour_by_lanes_plot, filename = "pdp_hour_by_lanes.svg", width = 7, height = 4)
-
-# pdp_calming <- 
-#   model_profile(explainer, 
-#                 type      = "partial",   
-#                 variables = "count_calming",
-#                 N         = NULL) 
-# 
-# pdp_calming_plot <- 
-#   as_tibble(pdp_calming$agr_profiles) %>% 
-#   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
-#   geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
-#   scale_y_continuous(limits = c(0, NA), 
-#                      expand = expansion(mult = c(0, 0.2)),
-#                      labels = label_percent()) +
-#   labs(title = "Predicted probability of speeding by number of traffic calming interventions",
-#        y = "Probability of speeding",
-#        x = "Number of calming interventions")
-# 
-# pdp_calming_plot
+#
 
 pdp_width <- 
   model_profile(explainer, 
                 type      = "partial",   
-                variables = "width",
+                variables = "curb_to_curb_width",
                 N         = NULL) 
 
 pdp_width_plot <- 
@@ -492,66 +607,515 @@ pdp_width_plot <-
   scale_y_continuous(limits = c(0, NA), 
                      expand = expansion(mult = c(0, 0.2)),
                      labels = label_percent()) +
-  labs(title = "Predicted probability of speeding by width of roadway",
-       y = "Probability of speeding",
+  labs(title = "Predicted speeding by width of roadway",
+       y = "Predicted speeding %",
        x = "Width (ft)")
 
-pdp_width_plot
+pdp_width_density <- ggplot(modeling_data, aes(x = curb_to_curb_width)) +
+  geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
 
-# ggsave(plot = pdp_width_plot, filename = "pdp_width.svg", width = 6, height = 4)
+pdp_width_plot / pdp_width_density + plot_layout(heights = c(4, 1))
 
-# pdp_width_per_lane <- 
-#   model_profile(explainer, 
-#                 type      = "partial",   
-#                 variables = "width_per_lane",
-#                 N         = NULL) 
-# 
-# pdp_width_per_lane_plot <- 
-#   as_tibble(pdp_width_per_lane$agr_profiles) %>% 
-#   ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
-#   geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
-#   scale_y_continuous(limits = c(0, NA), 
-#                      expand = expansion(mult = c(0, 0.2)),
-#                      labels = label_percent()) +
-#   labs(title = "Predicted probability of speeding by roadway width per lane",
-#        y = "Probability of speeding",
-#        x = "Width per lane (ft/lane)")
-# 
-# pdp_width_per_lane_plot
+pdp_width_by_period <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "curb_to_curb_width",
+                groups    = "speed_measurement_period",
+                N         = NULL)
+
+pdp_width_by_period_plot <- 
+  as_tibble(pdp_width_by_period$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by curb to curb width and time of day",
+       y = "Predicted speeding %",
+       x = "Curb to curb width",
+       color = "Time of day")
+
+pdp_width_by_period_plot
+
 #
-# pdp_width_by_lanes <- 
-#   model_profile(explainer, 
-#                 type      = "partial",   
-#                 variables = "width",
-#                 groups = "lanes",
-#                 N         = NULL)
-# 
-# width_range_by_lanes <- modeling_data %>% 
-#   filter(!is.na(lanes)) %>% 
-#   group_by(lanes) %>% 
-#   summarize(min_width = min(width, na.rm = TRUE), 
-#             max_width = max(width, na.rm = TRUE)) %>% 
-#   mutate(lanes = as.factor(lanes))
-# 
-# pdp_width_by_lanes_plot <- 
-#   as_tibble(pdp_width_by_lanes$agr_profiles) %>% 
-#   mutate(`_groups_` = as.factor(`_groups_`)) %>% 
-#   left_join(width_range_by_lanes, by = c(`_groups_` = "lanes")) %>% 
-#   # Remove width ranges not seen in data
-#   mutate(`_x_` = if_else(`_x_` >= min_width & `_x_` <= max_width, `_x_`, NA)) %>% 
-#   filter(!is.na(`_x_`)) %>% 
-#   ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`)) +
-#   geom_line(linewidth = 1.2, alpha = 0.8) +
-#   scale_y_continuous(limits = c(0, NA), 
-#                      expand = expansion(mult = c(0, 0.2)),
-#                      labels = label_percent()) +
-#   # scale_color_manual(values = c("#ff9500", "#ffd000", "#00badb", "#156082")) +
-#   labs(title = "Predicted probability of speeding by number of lanes and roadway width",
-#        y = "Probability of speeding",
-#        x = "Roadway width (ft)",
-#        color = "Number of")
-# 
-# pdp_width_by_lanes_plot
+
+pdp_lanewidth <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "width_per_traffic_lane",
+                N         = NULL) 
+
+pdp_lanewidth_plot <- 
+  as_tibble(pdp_lanewidth$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by width per lane",
+       y = "Predicted speeding %",
+       x = "lane width (ft)")
+
+pdp_lanewidth_density <- ggplot(modeling_data, aes(x = width_per_traffic_lane)) +
+  geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
+
+pdp_lanewidth_plot / pdp_lanewidth_density + plot_layout(heights = c(4, 1))
+
+pdp_lanewidth_by_period <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "width_per_traffic_lane",
+                groups    = "speed_measurement_period",
+                N         = NULL)
+
+pdp_lanewidth_by_period_plot <- 
+  as_tibble(pdp_lanewidth_by_period$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by width per lane and time of day",
+       y = "Predicted speeding %",
+       x = "Width per lane",
+       color = "Time of day")
+
+pdp_lanewidth_by_period_plot
+
+#
+
+pdp_bikelane <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "bike_lane_status",
+                N         = NULL) 
+
+pdp_bikelane_plot <- 
+  as_tibble(pdp_bikelane$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "Sharrow", 
+                             "Painted", 
+                             "Separated")) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by bike lane status",
+       y = "Predicted speeding %",
+       x = "Bike lane status")
+
+pdp_bikelane_density <- ggplot(modeling_data, aes(x = bike_lane_status)) +
+  geom_bar(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
+
+pdp_bikelane_plot / pdp_bikelane_density + plot_layout(heights = c(4, 1))
+
+# ggsave(filename = "pdp_bikelanes.svg", width = 6, height = 4)
+
+pdp_bikelane_by_period <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "bike_lane_status",
+                groups    = "speed_measurement_period",
+                N         = NULL)
+
+pdp_bikelane_by_period_plot <- 
+  as_tibble(pdp_bikelane_by_period$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "Sharrow", 
+                             "Painted", 
+                             "Separated")) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by bikelane status and time of day",
+       y = "Predicted speeding %",
+       x = "Bikelane status",
+       color = "Time of day")
+
+pdp_bikelane_by_period_plot
+
+#
+
+pdp_sidewalk <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "sidewalk_status",
+                N         = NULL) 
+
+pdp_sidewalk_plot <- 
+  as_tibble(pdp_sidewalk$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "One side", 
+                             "Both sides")) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by sidewalk status",
+       y = "Predicted speeding %",
+       x = "Sidewalk status")
+
+pdp_sidewalk_density <- ggplot(modeling_data, aes(x = sidewalk_status)) +
+  geom_bar(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
+
+pdp_sidewalk_plot / pdp_sidewalk_density + plot_layout(heights = c(4, 1))
+
+# ggsave(filename = "pdp_sidewalk.svg", width = 6, height = 4)
+
+pdp_sidewalk_by_period <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "sidewalk_status",
+                groups    = "speed_measurement_period",
+                N         = NULL)
+
+pdp_sidewalk_by_period_plot <- 
+  as_tibble(pdp_sidewalk_by_period$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "One side", 
+                             "Both sides")) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by sidewalk status and time of day",
+       y = "Predicted speeding %",
+       x = "Sidewalk status",
+       color = "Time of day")
+
+pdp_sidewalk_by_period_plot
+
+#
+
+pdp_parking <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "parking",
+                N         = NULL) 
+
+pdp_parking_plot <- 
+  as_tibble(pdp_parking$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "One side", 
+                             "Both sides")) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by parking status",
+       y = "Predicted speeding %",
+       x = "Parking status")
+
+pdp_parking_density <- ggplot(modeling_data, aes(x = parking)) +
+  geom_bar(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
+
+pdp_parking_plot / pdp_parking_density + plot_layout(heights = c(4, 1))
+
+# ggsave(filename = "pdp_parking.svg", width = 6, height = 4)
+
+pdp_parking_by_period <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "parking",
+                groups    = "speed_measurement_period",
+                N         = NULL)
+
+pdp_parking_by_period_plot <- 
+  as_tibble(pdp_parking_by_period$agr_profiles) %>% 
+  mutate(`_x_` = fct_relevel(`_x_`,
+                             "None", 
+                             "One side", 
+                             "Both sides")) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by parking status and time of day",
+       y = "Predicted speeding %",
+       x = "Parking status",
+       color = "Time of day")
+
+pdp_parking_by_period_plot
+
+#
+
+pdp_traffic_calming <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "traffic_calming",
+                N         = NULL) 
+
+pdp_traffic_calming_plot <- 
+  as_tibble(pdp_traffic_calming$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by traffic calming status",
+       y = "Predicted speeding %",
+       x = "Traffic calming status")
+
+pdp_traffic_calming_density <- ggplot(modeling_data, aes(x = traffic_calming)) +
+  geom_bar(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
+
+pdp_traffic_calming_plot / pdp_traffic_calming_density + plot_layout(heights = c(4, 1))
+
+# ggsave(filename = "pdp_traffic_calming.svg", width = 6, height = 4)
+
+pdp_traffic_calming_by_period <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "traffic_calming",
+                groups    = "speed_measurement_period",
+                N         = NULL)
+
+pdp_traffic_calming_by_period_plot <- 
+  as_tibble(pdp_traffic_calming_by_period$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by traffic calming status and time of day",
+       y = "Predicted speeding %",
+       x = "Traffic calming status",
+       color = "Time of day")
+
+pdp_traffic_calming_by_period_plot
+
+###
+
+pdp_length <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "length",
+                N         = NULL) 
+
+pdp_length_plot <- 
+  as_tibble(pdp_length$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by segment length",
+       y = "Predicted speeding %",
+       x = "Roadway segment length")
+
+pdp_length_density <- ggplot(modeling_data, aes(x = length)) +
+  geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
+
+pdp_length_plot / pdp_length_density + plot_layout(heights = c(4, 1))
+
+pdp_length_by_period <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "length",
+                groups    = "speed_measurement_period",
+                N         = NULL)
+
+pdp_length_by_period_plot <- 
+  as_tibble(pdp_length_by_period$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by segment length and time of day",
+       y = "Predicted speeding %",
+       x = "Segment length",
+       color = "Time of day")
+
+pdp_length_by_period_plot
+
+#
+
+pdp_road_classification <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "road_classification_city",
+                N         = NULL) 
+
+pdp_road_classification_plot <- 
+  as_tibble(pdp_road_classification$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by road classification",
+       y = "Predicted speeding %",
+       x = "Road classification")
+
+pdp_road_classification_density <- ggplot(modeling_data, aes(x = road_classification_city)) +
+  geom_bar(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
+
+pdp_road_classification_plot / pdp_road_classification_density + plot_layout(heights = c(4, 1))
+
+pdp_road_classification_by_period <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "road_classification_city",
+                groups    = "speed_measurement_period",
+                N         = NULL)
+
+pdp_road_classification_by_period_plot <- 
+  as_tibble(pdp_road_classification_by_period$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by road classification and time of day",
+       y = "Predicted speeding %",
+       x = "Road classification",
+       color = "Time of day")
+
+pdp_road_classification_by_period_plot
+
+#
+
+pdp_parcel_density <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "parcel_density",
+                N         = NULL) 
+
+pdp_parcel_density_plot <- 
+  as_tibble(pdp_parcel_density$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, group = `_label_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8, color = "#156082") +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by segment parcel density",
+       y = "Predicted speeding %",
+       x = "Roadway segment parcel density")
+
+pdp_parcel_density_density <- ggplot(modeling_data, aes(x = parcel_density)) +
+  geom_density(fill = "#3366CC", alpha = 0.3, color = "#3366CC") +
+  scale_y_reverse() +          # flip so density "hangs" below the axis
+  theme_minimal() +
+  theme(
+    axis.title.y  = element_blank(),
+    axis.text.y   = element_blank(),
+    axis.ticks.y  = element_blank(),
+    panel.grid    = element_blank()
+  ) +
+  labs(x = "Distribution of modeling data")
+
+pdp_parcel_density_plot / pdp_parcel_density_density + plot_layout(heights = c(4, 1))
+
+pdp_parcel_density_by_period <- 
+  model_profile(explainer, 
+                type      = "partial",   
+                variables = "parcel_density",
+                groups    = "speed_measurement_period",
+                N         = NULL)
+
+pdp_parcel_density_by_period_plot <- 
+  as_tibble(pdp_parcel_density_by_period$agr_profiles) %>% 
+  ggplot(aes(x = `_x_`, y = `_yhat_`, color = `_groups_`, group = `_groups_`)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  scale_y_continuous(limits = c(0, NA), 
+                     expand = expansion(mult = c(0, 0.2)),
+                     labels = label_percent()) +
+  labs(title = "Predicted speeding by segment parcel density and time of day",
+       y = "Predicted speeding %",
+       x = "Segment parcel density",
+       color = "Time of day")
+
+pdp_parcel_density_by_period_plot
+
+#
+
+
+
 
 
 

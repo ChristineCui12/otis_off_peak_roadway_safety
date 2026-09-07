@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About | 24h Roadway Safety Explorer | Philadelphia</title>
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <link rel="apple-touch-icon" href="assets/icon.png" />
+
+  <!-- Philadelphia Design System Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/about.css" />
+</head>
+<body class="about-page">
+
+  <!-- =========================================================
+       App Header — Philadelphia OTIS branding
+       ========================================================= -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="city-seal" aria-hidden="true">
+        <img src="assets/icon.png" alt="App logo" width="38" height="38" style="object-fit:contain;display:block;" />
+      </div>
+      <div class="header-title">
+        <div class="header-dept">Peak vs. Off-Peak Speed Risk</div>
+        <h1 class="header-app-name">Roadway Safety Explorer</h1>
+      </div>
+    </div>
+    <nav class="header-nav" aria-label="Main navigation">
+      <a href="landing.html" class="nav-link">Home</a>
+      <a href="index.html"   class="nav-link">Map</a>
+      <a href="table.html"   class="nav-link">Data Table</a>
+      <a href="about.html"   class="nav-link active">About</a>
+      <a href="https://github.com/chihyunkim/otis_off_peak_roadway_safety" class="nav-link nav-link--icon" target="_blank" rel="noopener" aria-label="GitHub repository">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </nav>
+  </header>
+
+  <!-- =========================================================
+       About Content
+       ========================================================= -->
+  <main class="about-main">
+    <div class="about-container">
+
+      <!-- Hero section -->
+      <section class="about-hero">
+        <div class="about-hero-badge">Spring 2026 · Graduate Research Practicum</div>
+        <h2 class="about-hero-title">About This Tool</h2>
+        <p class="about-hero-sub">
+          The Peak vs. Off-Peak Speed Risk Roadway Safety Explorer is a research prototype developed as a graduate
+          practicum project at the University of Pennsylvania's Weitzman School of Design,
+          in collaboration with the City of Philadelphia's Office of Transportation &amp;
+          Infrastructure Systems (OTIS). It investigates how roadways designed for peak-hour
+          conditions may create safety hazards during off-peak hours, and what road design
+          changes could reduce those risks.
+        </p>
+        <p class="about-hero-sub about-report-ref">
+
+          ——This tool was created by
+          <a href="https://github.com/kavanaraju" class="about-link about-author-link" target="_blank" rel="noopener">Kavana Raju</a>,
+          <a href="https://github.com/ChristineCui12" class="about-link about-author-link" target="_blank" rel="noopener">Christine Cui</a>,
+          <a href="https://github.com/chihyunkim" class="about-link about-author-link" target="_blank" rel="noopener">Chi-Hyun Kim</a>,
+          and
+          <a href="https://github.com/demiyang12" class="about-link about-author-link" target="_blank" rel="noopener">Demi Yang</a>.
+        </p>
+        <p class="about-hero-sub about-report-ref">
+         ——For the full methodology, analysis, and findings, see the <a href="https://chihyunkim.github.io/otis_off_peak_roadway_safety/PROJECT_WRITEUP.html" class="about-link about-report-link" target="_blank" rel="noopener">complete research report &rarr;</a>
+        </p>
+      </section>
+
+      <!-- Key Statistics Banner -->
+      <section class="about-stats-banner">
+        <div class="about-stat-item">
+          <div class="about-stat-value">3×</div>
+          <div class="about-stat-label">Off-peak pedestrian KSI concentration ratio — evening hours (8 PM–3 AM) are 14% of daily traffic but produce 46% of pedestrian KSI crashes</div>
+        </div>
+        <div class="about-stat-divider"></div>
+        <div class="about-stat-item">
+          <div class="about-stat-value">0.920</div>
+          <div class="about-stat-label">Model R² — speeding is structurally determined, not random; road design choices explain 92% of variance in observed speeding rates</div>
+        </div>
+        <div class="about-stat-divider"></div>
+        <div class="about-stat-item">
+          <div class="about-stat-value">54.7%</div>
+          <div class="about-stat-label">Of road segments where majority of traffic speeds during off-peak hours are Major Arterials — wide, multi-lane corridors built for peak demand</div>
+        </div>
+      </section>
+
+      <div class="about-grid">
+
+        <!-- Left column: methodology -->
+        <div class="about-col-main">
+
+          <section class="about-card">
+            <h3 class="about-card-title">The Off-Peak Danger</h3>
+            <p>
+              Traffic crashes are a leading cause of injury and death in Philadelphia, and
+              arterial roads are disproportionately dangerous. Crash volumes and KSI
+              (killed or seriously injured) rates are highest during nighttime and early
+              morning hours, even though traffic volumes are low during those periods.
+            </p>
+            <p>
+              Recent tragedies in West Philadelphia illustrate the risk. On November 20, 2025,
+              Meaza Brown, 48, was struck and killed while crossing Market Street at 33rd Street.
+              One week later, on November 27, Rosa Mar Espinosa Rodas, 41, was killed by a
+              speeding driver while walking on 36th Street. Both incidents occurred during
+              off-peak hours when roads were relatively empty — and that emptiness may itself
+              be part of the problem.
+            </p>
+            <p>
+              Analysis of speed sensor data collected across Philadelphia confirms the pattern:
+              speeding is significantly more prevalent during off-peak hours, and more common
+              on major and minor arterials than on collectors or local streets.
+            </p>
+            <div class="about-note">
+              <div class="about-note-label">News coverage:</div>
+              <ul class="about-source-list">
+                <li>
+                  <a href="https://www.nbcphiladelphia.com/news/local/woman-killed-in-hit-and-run-on-market-st-in-university-city-police-say/4305076/"
+                     class="about-link" target="_blank" rel="noopener">
+                    NBC10 Philadelphia on the 33rd and Market Street hit-and-run
+                  </a>
+                </li>
+                <li>
+                  <a href="https://6abc.com/post/woman-fatally-struck-speeding-driver-crossing-philadelphia-street-police/18219278/"
+                     class="about-link" target="_blank" rel="noopener">
+                    6abc Action News on Rosa Mar Espinosa Rodas' death
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section class="about-card">
+            <h3 class="about-card-title">Research Hypothesis: A Deadly Cascade</h3>
+            <p>
+              This project tests the hypothesis that <em>roadways designed to move peak-hour
+              vehicle demand can create excess capacity during the rest of the day, increasing
+              speeding opportunity and raising crash severity risk during off-peak hours.</em>
+              The proposed mechanism is a cascade:
+            </p>
+            <ol class="about-list">
+              <li><strong>Peak-oriented design</strong> — Many urban arterials are sized to
+                reduce congestion during high-demand periods. Wider lanes, multiple travel
+                lanes, and higher design speeds can also increase the speeds drivers choose
+                when the street is not congested.</li>
+              <li><strong>Off-peak underuse</strong> — For most hours of the day, demand is
+                lower than peak-hour design capacity. The roadway still offers the same
+                amount of pavement, but fewer vehicles are using it.</li>
+              <li><strong>Excess capacity becomes speed opportunity</strong> — Lower
+                congestion reduces friction, while wide, forgiving geometry can signal that
+                higher speeds are acceptable. This combination can increase free-flow speeds
+                and speed variability.</li>
+              <li><strong>Speed turns risk into severity</strong> — Once a crash occurs,
+                injury severity rises steeply with impact speed, especially for pedestrians
+                and cyclists. Small increases in operating speed can therefore produce much
+                larger increases in fatality risk.</li>
+            </ol>
+            <p>
+              In short, the same design choices that help a corridor "work" during peak
+              periods may leave too much unused capacity at night and other off-peak times.
+              This project therefore models speeding frequency as an upstream safety signal:
+              crashes are relatively rare and stochastic, but persistent high-speed driving
+              reveals where roadway design may be creating conditions for severe outcomes.
+            </p>
+            <div class="about-note">
+              <div class="about-note-label">Sources:</div>
+              <ul class="about-source-list">
+                <li><a href="https://www.oecd.org/en/publications/speed-management_9789282103784-en"
+                       class="about-link" target="_blank" rel="noopener">OECD/ECMT, <em>Speed Management</em> (2006)</a></li>
+                <li><a href="https://www.who.int/publications/i/item/9789241565684"
+                       class="about-link" target="_blank" rel="noopener">WHO, <em>Global Status Report on Road Safety 2018</em></a></li>
+                <li><a href="https://books.google.com/books/about/Design_Speed_Operating_Speed_and_Posted.html?id=o6q4lnpws-cC"
+                       class="about-link" target="_blank" rel="noopener">Fitzpatrick et al., <em>Design Speed, Operating Speed, and Posted Speed Practices</em> (2003)</a></li>
+                <li><a href="https://journals.sagepub.com/doi/10.1177/0885412209335553"
+                       class="about-link" target="_blank" rel="noopener">Ewing &amp; Dumbaugh (2009)</a></li>
+                <li><a href="https://www.tandfonline.com/doi/full/10.1080/01944363.2011.536101"
+                       class="about-link" target="_blank" rel="noopener">Dumbaugh &amp; Li (2011)</a></li>
+                <li><a href="https://www.safetylit.org/citations/index.php?citationIds%5B%5D=citjournalarticle_604211_38&amp;fuseaction=citations.viewdetails"
+                       class="about-link" target="_blank" rel="noopener">Garber &amp; Gadiraju (1989)</a></li>
+                <li><a href="https://www.trl.co.uk/publications/trl421"
+                       class="about-link" target="_blank" rel="noopener">Taylor, Lynam &amp; Baruya (2000)</a></li>
+                <li><a href="https://pubmed.ncbi.nlm.nih.gov/21094293/"
+                       class="about-link" target="_blank" rel="noopener">Rosén, Stigson &amp; Sander (2011)</a></li>
+                <li><a href="https://www.kittelson.com/ideas/the-24-hour-capacity-framework-an-alternative-to-using-the-peak-hour-to-design-roads/"
+                       class="about-link" target="_blank" rel="noopener">Kittelson &amp; Associates, <em>The 24-Hour Capacity Framework</em></a></li>
+              </ul>
+            </div>
+          </section>
+
+          <section class="about-card">
+            <h3 class="about-card-title">Data &amp; Methodology</h3>
+            <p>
+              The project integrates multiple datasets covering Philadelphia's road network,
+              traffic behavior, and built environment characteristics. Speed observations
+              come from DVRPC speed measurement points deployed on approximately 446 road
+              segments across the city, recorded from 2022 to 2025. Each record captures
+              the number of vehicles exceeding the posted speed limit during a given hour,
+              as well as total traffic volume for that hour.
+            </p>
+            <p>
+              For this tool, hourly measurements are aggregated into four time periods:
+              night off-peak (20:00-06:00), morning peak (07:00-10:00), midday off-peak
+              (11:00-15:00), and evening peak (16:00-19:00). We train a
+              <strong>Random Forest regression model</strong> to predict the percentage of
+              traffic on a road segment, during a given time of day, traveling above the
+              speed limit on that segment. Predictors fall into three categories:
+            </p>
+            <ul class="about-list">
+              <li><strong>Spatiotemporal &amp; traffic dynamics</strong> — time period, observed traffic volume, speed measurement month, weekday vs. weekend, and speed limit</li>
+              <li><strong>Roadway geometry</strong> — roadway width dedicated to traffic lanes, curb-to-curb width, width per traffic lane, segment length, traffic direction, divided roadway, and shoulder width of 8 or more feet</li>
+              <li><strong>Road classification &amp; built environment</strong> — City of Philadelphia road typology, bike lane type, on-street parking, sidewalk coverage, traffic calming devices, transit stop density, intersection control density, parcel density</li>
+            </ul>
+            <p>
+              We use the
+              <a href="https://www.tidymodels.org/" target="_blank" rel="noopener">tidymodels</a>
+              framework in R to create the training/testing split, conduct cross-validation
+              and hyperparameter search, preprocess the data, train the model, and generate
+              predictions and explanatory plots. The final held-out test set reserves 25%
+              of the data, stratified over the speeding outcome, purely for model evaluation.
+            </p>
+          </section>
+
+          <section class="about-card">
+            <h3 class="about-card-title">Model Performance</h3>
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <div class="metric-value">0.920</div>
+                <div class="metric-label">R² (variance explained)</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value">4.2%</div>
+                <div class="metric-label">Mean Absolute Error</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value">7.4%</div>
+                <div class="metric-label">Root Mean Square Error</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value">25%</div>
+                <div class="metric-label">Held-out test data</div>
+              </div>
+            </div>
+            <p class="about-note">
+              The model explains roughly 92% of variance in speeding frequency across
+              segments and time periods, with a mean absolute error of approximately
+              4 percentage points on the final held-out test data. The Random Forest
+              modeling approach was chosen for its ability to capture non-linear
+              relationships and feature interactions (e.g., lane width × road type × time
+              period) without requiring explicit interaction terms.
+            </p>
+          </section>
+
+          <section class="about-card">
+            <h3 class="about-card-title">Intervention Scenarios</h3>
+            <p>
+              A core limitation of road safety research is that individual geometric features
+              cannot be considered in isolation — a lane diet always implies changes to lane
+              width, and adding a separated bike lane reallocates curb-to-curb space. This
+              tool addresses that by presenting <strong>pre-computed intervention scenarios</strong>:
+              holistic what-if road configurations run through the full trained model.
+            </p>
+            <p>
+              Each scenario represents a realistic re-allocation of road space, with all
+              downstream geometry recalculated consistently. Available scenario types include:
+            </p>
+            <table class="about-table">
+              <thead>
+                <tr>
+                  <th>Scenario Type</th>
+                  <th>What changes</th>
+                  <th>Typical effect on speeding</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Lane Diet (−1 lane)</td>
+                  <td>One travel lane removed; width redistributed</td>
+                  <td>↓ Reduces speed opportunity</td>
+                </tr>
+                <tr>
+                  <td>Major Road Diet (→ 2 lanes)</td>
+                  <td>Multi-lane road reduced to 2 travel lanes</td>
+                  <td>↓ Strongest lane-reduction effect</td>
+                </tr>
+                <tr>
+                  <td>Add Painted Bike Lane</td>
+                  <td>Painted bike lane added to one or both sides</td>
+                  <td>↓ Narrows effective travel width</td>
+                </tr>
+                <tr>
+                  <td>Add Separated Bike Lane</td>
+                  <td>Protected bike lane added, displacing travel lane space</td>
+                  <td>↓↓ Stronger effect than painted lane</td>
+                </tr>
+                <tr>
+                  <td>Lane Diet + Bike Lane</td>
+                  <td>Lane removed and reallocated to bike infrastructure</td>
+                  <td>↓↓ Combined effect</td>
+                </tr>
+                <tr>
+                  <td>Parking Change</td>
+                  <td>Parking lanes added or removed on one or both sides</td>
+                  <td>Varies — adding parking narrows travel lanes</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="about-note">
+              Scenario predictions are pre-computed by running each road configuration
+              through the trained Random Forest model offline. Results reflect model
+              predictions under each scenario's geometry — not real-world guarantees.
+              Outcomes depend on implementation quality, enforcement, driver response,
+              and local conditions not captured in the model.
+            </p>
+          </section>
+
+        </div>
+
+        <!-- Right column: sidebar cards -->
+        <aside class="about-col-side">
+
+          <div class="about-sidebar-card">
+            <h4 class="sidebar-card-title">Data Sources</h4>
+            <ul class="sidebar-list">
+              <li><span class="source-type">Speed and traffic volume measurement data</span><span class="source-org"><a href="https://www.dvrpc.org/webmaps/trafficcounts/" class="about-link" target="_blank" rel="noopener">Delaware Valley Regional Planning Commission (DVRPC)</a></span></li>
+              <li><span class="source-type">Road geometry measurements</span><span class="source-org"><a href="https://www.google.com/earth/" class="about-link" target="_blank" rel="noopener">Google Earth imagery</a></span><span class="source-author-note">collected by authors</span></li>
+              <li><span class="source-type">Crash and KSI records</span><span class="source-org"><a href="https://experience.arcgis.com/experience/51809b06e7b140208a4ed6fbad964990/page/County" class="about-link" target="_blank" rel="noopener">Pennsylvania Department of Transportation (PennDOT)</a></span></li>
+              <li><span class="source-type">Street centerlines and roadway attributes</span><span class="source-org"><a href="https://opendataphilly.org/datasets/street-centerlines/" class="about-link" target="_blank" rel="noopener">City of Philadelphia OpenDataPhilly</a></span></li>
+              <li><span class="source-type">Supplemental road attributes</span><span class="source-org"><a href="https://www.openstreetmap.org/" class="about-link" target="_blank" rel="noopener">OpenStreetMap (OSM)</a></span></li>
+              <li><span class="source-type">Bike network</span><span class="source-org"><a href="https://opendataphilly.org/datasets/bike-network/" class="about-link" target="_blank" rel="noopener">City of Philadelphia OpenDataPhilly</a></span></li>
+              <li><span class="source-type">Transit stop locations</span><span class="source-org"><a href="https://opendataphilly.org/datasets/septa-routes-stops-locations/" class="about-link" target="_blank" rel="noopener">Southeastern Pennsylvania Transportation Authority (SEPTA) / City of Philadelphia OpenDataPhilly</a></span></li>
+              <li><span class="source-type">Traffic calming infrastructure locations</span><span class="source-org"><a href="https://opendataphilly.org/datasets/traffic-calming/" class="about-link" target="_blank" rel="noopener">City of Philadelphia OpenDataPhilly</a></span></li>
+              <li><span class="source-type">City parcel data</span><span class="source-org"><a href="https://data.phila.gov/visualizations/property-assessments" class="about-link" target="_blank" rel="noopener">Office of Property Assessment (OPA)</a></span></li>
+            </ul>
+          </div>
+
+          <div class="about-sidebar-card">
+            <h4 class="sidebar-card-title">Key Findings</h4>
+            <p class="sidebar-text">
+              <strong>Time of day is important.</strong> Off-peak night hours (8 PM–6 AM)
+              show the highest predicted speeding frequency. Speeding drops markedly during
+              morning and evening peak periods — consistent with the hypothesis that lower
+              congestion creates speed opportunity.
+            </p>
+            <p class="sidebar-text">
+              <strong>Width drives speed.</strong> Speeding frequency increases sharply as
+              the roadway width dedicated to travel lanes rises from 15 ft to 25 ft, and
+              continues to grow more gradually above that threshold.
+            </p>
+            <p class="sidebar-text">
+              <strong>Design interventions matter.</strong> The model predicts
+              reductions in speeding frequency associated with separated bike lanes, parking
+              on both sides of the road, sidewalks on both sides, and the presence of
+              traffic calming devices.
+            </p>
+          </div>
+
+          <div class="about-sidebar-card">
+            <h4 class="sidebar-card-title">How to Use This Tool</h4>
+            <ol class="sidebar-list sidebar-list-numbered">
+              <li>Click a road segment on the map to open its detail panel.</li>
+              <li>Review the segment's current predicted speeding rate, observed speed data, crash history, and road cross-section.</li>
+              <li>Switch time periods using the bar at the top of the map to compare morning peak, midday, evening peak, and night off-peak.</li>
+              <li>In the intervention panel, select a scenario type (bike lane, lane diet, parking, etc.) and choose a specific configuration.</li>
+              <li>Compare the predicted speeding rate under the chosen scenario against existing conditions.</li>
+              <li>Use the "Color roads by" dropdown to explore the network by predicted speeding, road class, lanes, or speed limit.</li>
+              <li>Search by road name or segment ID to navigate to a specific location.</li>
+            </ol>
+          </div>
+
+          <div class="about-sidebar-card about-sidebar-card--note">
+            <h4 class="sidebar-card-title">Limitations &amp; Caveats</h4>
+            <p class="sidebar-text">
+              This is a <em>research prototype</em>, not a production planning tool. Key
+              limitations include:
+            </p>
+            <ul class="sidebar-list">
+              <li>Model predictions are estimates with errors and uncertainty. They reflect patterns in the input data and do not prove cause-and-effect relationships.</li>
+              <li>Real-world safety outcomes depend on implementation quality, enforcement, driver response, and other factors not captured in the model.</li>
+              <li>The speed data underlying the model are limited to 446 roadway segments, so predictions are not available for a wider selection of roads.</li>
+              <li>Time-of-day predictions account for traffic volume and time-of-year effects, but not other changing conditions such as parking occupancy or pedestrian volume. As a result, night-time speeding may sometimes be underestimated.</li>
+              <li>Roadway configurations may have changed since speed measurements were made in 2022-2025. We attempted to capture road characteristics accurate to the time of measurement, but discrepancies may remain.</li>
+              <li>Speeding is treated as a binary yes/no outcome for modeling and communication, though different degrees of speeding have different safety implications.</li>
+            </ul>
+          </div>
+
+          <div class="about-sidebar-card">
+            <h4 class="sidebar-card-title">Policy Recommendations</h4>
+            <p class="sidebar-text">Based on the model's findings, the research identifies five priority interventions:</p>
+            <ol class="sidebar-list sidebar-list-numbered">
+              <li><strong>Road redesign prioritization.</strong> Wide (&gt;50 ft curb-to-curb), multi-lane (≥4 lanes) undivided arterials with high predicted nighttime speeding and KSI history are strongest candidates for road diet feasibility studies.</li>
+              <li><strong>Traffic calming deployment.</strong> Calmed segments show RMSE of 0.025 vs. 0.052 for uncalmed — physical calming makes speeding predictable and dramatically reduces it.</li>
+              <li><strong>Bike infrastructure as safety investment.</strong> Predicted speeding decreases monotonically from no bike lane through sharrow, painted, and separated — even a painted lane shifts the model's prediction downward.</li>
+              <li><strong>Enforcement targeting.</strong> Model outputs can guide speed camera placement at highest-risk late-night (10 PM–5 AM) segments, particularly on Major Arterials.</li>
+              <li><strong>Monitoring network expansion.</strong> The highest errors occur on Major Arterials and 5+ lane roads — the worst KSI records and fewest monitoring observations — which most need expanded sensor coverage.</li>
+            </ol>
+            <p class="sidebar-text" style="margin-top:10px">
+              <a href="https://chihyunkim.github.io/otis_off_peak_roadway_safety/PROJECT_WRITEUP.html#policy-scenarios" class="about-link" target="_blank" rel="noopener">Full scenario analysis &rarr;</a>
+            </p>
+          </div>
+
+          <div class="about-sidebar-card">
+            <h4 class="sidebar-card-title">Acknowledgments</h4>
+            <p class="sidebar-text">
+              This project was developed in collaboration with the City of Philadelphia's
+              Office of Transportation &amp; Infrastructure Systems (OTIS), whose staff
+              provided domain expertise, client guidance, and access to speed sensor data.
+            </p>
+            <p class="sidebar-text">
+              We gratefully acknowledge the open data resources provided by PennDOT,
+              DVRPC, OpenStreetMap contributors, SEPTA, and the City of Philadelphia's
+              Office of Property Assessment.
+            </p>
+            <p class="sidebar-text">
+              <a href="https://www.phila.gov/departments/office-of-transportation-and-infrastructure-systems/"
+                 class="about-link" target="_blank" rel="noopener">
+                phila.gov/departments/otis
+              </a>
+            </p>
+          </div>
+
+        </aside>
+      </div><!-- /.about-grid -->
+
+    </div><!-- /.about-container -->
+  </main>
+
+  <!-- Disclaimer Modal -->
+  <div id="otis-disclaimer-modal" class="otis-modal-overlay">
+    <div class="otis-modal">
+      <div class="otis-modal-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Research Tool — Not an Official Government App
+      </div>
+      <div class="otis-modal-body">
+        <p>This tool is an <strong>academic research prototype</strong> and is <strong>not</strong> an official application of the City of Philadelphia or its Office of Transportation &amp; Infrastructure Systems (OTIS).</p>
+        <p>Data, model predictions, and visualizations are produced for research and educational purposes only. They have not been reviewed or endorsed by the City of Philadelphia, OTIS, or any other government agency, and should not be used as the sole basis for policy or capital investment decisions.</p>
+        <p>By continuing, you acknowledge that this is an independent research tool, not an authoritative government resource.</p>
+      </div>
+      <div class="otis-modal-footer">
+        <button id="otis-disclaimer-ok" class="otis-modal-btn">I Understand — Continue</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    document.getElementById('otis-disclaimer-ok').addEventListener('click', function () {
+      document.getElementById('otis-disclaimer-modal').classList.add('hidden');
+    });
+  </script>
+</body>
+</html>
